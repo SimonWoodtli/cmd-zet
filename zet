@@ -1,0 +1,206 @@
+#!/bin/sh
+## my own `zet` command in the making
+#set -e                                                                          
+shopt -s extglob
+########################### global variables ###########################
+declare red=$'\033[31m'                                                         
+declare black=$'\033[30m'                                                       
+declare green=$'\033[32m'                                                       
+declare yellow=$'\033[33m'                                                      
+declare blue=$'\033[34m'                                                        
+declare magenta=$'\033[35m'                                                     
+declare cyan=$'\033[36m'                                                        
+declare white=$'\033[37m'                                                       
+declare reset=$'\033[0m'                                                        
+declare bold=$'\033[1m'  
+
+declare configFile="$HOME/.config/zet/config"
+declare zetDir
+declare -A HELP
+############################## config init #############################
+__configInit() {
+  ## check if zet config dir exists or create it
+  [[ -d "${configFile%config}" ]] || mkdir -p "${configFile%config}"
+  ## dump config data into file
+  _configData | sort > "$configFile"
+}
+_configData() {
+  ## change these settings to your needs
+  cat <<EOF
+editor=vim
+current=public
+zetPublicDir=$HOME/Repos/github.com/SimonWoodtli/zet
+zetPrivateDir=$HOME/Private/zet
+downloadDir=$HOME/Downloads
+screenshotDir=$HOME/Pictures/Screenshots
+EOF
+}
+########################### crucial zet tests ##########################
+## test if configfile exits if not run the initialize command
+[[ -f "$configFile" ]] || __configInit
+source "$configFile"
+## read config file if current is set to public set zetDir to path of public zet. 
+## Else set it to path of private zet.
+[[ "$current" == public ]] && zetDir="$zetPublicDir" || zetDir="$zetPrivateDir"
+############################## config cmds #############################
+__configGetCurrent() { echo "$current" ; }
+__configUseZet() { 
+  case "$1" in
+    public|Public) sed -i 's|current=.*|current=public|' "$configFile" ;;
+    private|Private) sed -i 's|current=.*|current=private|' "$configFile" ;;
+    *) echo "${yellow}Warning:$reset only values accepted: private, public"
+  esac
+}
+############################### utilities ##############################
+_isoSec() { date -u +%Y%m%d%H%M%S; }
+
+################################ create ################################
+__create() {
+  ## create file
+  local dir="$zetDir/$(_isoSec)" #absolute path
+  #dir="$(x.dir)/$(x.isoSec)" #TODO initial confifile that stores public/private zet dir
+  local readme="$dir/README.md" #absolute path
+  local title="$*" 
+  ##TODO WHY not just use title, whats the point of line variable???J
+  mkdir -p "$dir"
+  printf "# %s\n\n" "$title" > "$readme"
+  ## edit file
+  _createEditFile
+  ## push file to remote git repo
+  _createPushGit
+} 
+_createEditFile() { "$EDITOR" "$readme" ; }
+_createPushGit() {
+  ## check if readme.md is empty, if so abort git commands
+  [[ -s "$readme" ]] || return 1
+  cd "$dir" &>/dev/null
+  ## check if title has changed after editing if so reassign it
+  local newTitle="$(head -1 "$readme" | sed 's|#\+ *||')"
+  [[ "$title" == "$newTitle" ]] || title="$newTitle"
+  ## check if title string is not empty or exit
+  test -n "$title"
+  git pull -q
+  echo "${green}Committing:$reset ${bold}$title${reset}"
+  git add -A "$dir" &>/dev/null
+  git commit -m "$title" &>/dev/null
+  git push &>/dev/null
+}
+
+######################## fzf dependent functions #######################
+
+## fzf functions to edit files
+__fzfSelect() {
+  ## filter and merge lines
+  local -a mergeTitleTag=()
+  local -i i=0
+  for f in "$zetDir"/*; do 
+    filterLastLine="$(tail -n 1 "$f"/README.md 2>/dev/null)"
+    filterFirstLine="$(head -n1 "$f"/README.md 2>/dev/null)"
+    #echo "$(tail -n 1 "$f"/README.md 2>/dev/null)"
+    mergeTitleTag[$i]="$filterFirstLine"
+    if [[ "$filterLastLine" =~ ^[[:blank:]]{4}\#.*$ ]]; then
+      mergeTitleTag[$i]+="$filterLastLine"
+    fi
+    i+=1
+  done
+  ## fzf select title with tags at the end of title
+  ##TODO make this an array so multiple files can be selected
+  ##IMPORTANT!!creating this feature with array will cost a lot of overhead many
+  ## loops will be needed for the other edit and delete functions that
+  #want to utilize this??
+  local selectTitleLine="$(for element in "${mergeTitleTag[@]}"; do           \
+    echo "$element"; done                                                     \
+    | fzf --no-preview      `#pipe each Title and possible Tagline into fzf`  \
+    | sed -r 's|[[:blank:]]{4}#[a-z].*$||g')" `#remove the tags from string`
+  ## case for arguments passed into it from first layer case, hardcoded
+  case  "$1" in
+  ## edit file from fzf selection
+    edit) _edit ;;
+    delete) _delete;;
+    *)
+  esac
+}
+
+_delete() {
+  local dir="$(rg --no-heading -N "^""$selectTitleLine""$" "$zetDir" | head -n1 | sed 's|/README.md:.*||g')"
+  rm -rf "$dir"
+  _deletePushGit
+}
+_deletePushGit() {
+  ## TODO create an array from all the selected files
+  #local -a deletedZet=( "$( git ls-files --deleted )" )
+  cd "$zetDir" &>/dev/null
+  local dirIsoSec="$(echo $dir | sed 's|.*/||')"
+  local title="Deleted $dirIsoSec"
+  ## check if dirIsoSec string is empty if so exit
+  test -n "$dirIsoSec"
+  git pull -q
+  echo "${green}Committing:$reset ${bold}$title${reset}"
+  git add -A "$dir" &>/dev/null
+  git commit -m "$title" &>/dev/null
+  git push &>/dev/null
+
+}
+_edit() {
+  local dir="$(rg --no-heading -N "^""$selectTitleLine""$" "$zetDir" | head -n1 | sed 's|/README.md:.*||g')"
+  local readme="$dir/README.md" #absolute path
+  #echo "$readme"
+  "$EDITOR" "$readme"
+  exit
+  _editPushGit
+}
+
+_editPushGit() {
+  cd "$dir" &>/dev/null
+  ## TODO check if any changes where made, if not abort git
+  #??
+  ## assign title
+  local title="$(head -1 "$readme" | sed 's|#\+ *||')"
+  ## check if title string is empty if so exit
+  test -n "$title"
+  git pull -q
+  echo "${green}Committing:$reset ${bold}$title${reset}"
+  git add -A "$dir" &>/dev/null
+  git commit -m "$title" &>/dev/null
+  git push &>/dev/null
+}
+
+__link() {
+  ## filter and merge lines
+  local -a addLinkLine=()
+  local -i i=0
+  ## loop over all dir in zetDir
+  for dir in "$zetDir"/*; do
+    filterFirstLine="$(head -n1 "$dir/README.md" 2>/dev/null | rg -i "$1" | sed 's|#[[:blank:]]||')"
+    ## if it already finds keyword in title skip checking the tagline
+    #echo $dir
+    if [[ -n "$filterFirstLine" ]]; then
+      ## add title to array
+      addLinkLine[$i]="* [${dir##*/}](/${dir##*/}/) $filterFirstLine"
+      i+=1
+      continue
+    fi
+    ## store last line
+    filterLastLine="$(tail -n 1 "$dir/README.md" 2>/dev/null | rg -i "$1")"
+    ## check if last line has same structure to tagline
+    if [[ "$filterLastLine" =~ ^[[:blank:]]{4}\#.*$ ]]; then
+      ## add the tagline title to array
+      addLinkLine[$i]+="* [${dir##*/}](/${dir##*/}/) $(head -n1 "$dir/README.md" 2>/dev/null | sed 's|#[[:blank:]]||')"
+      i+=1
+    fi
+  done
+  printf '%s\n' "${addLinkLine[@]}"
+}
+
+## first layer case: for arguments the user passes into zet, dynamic
+case "$1" in
+  create) __create "${@:2}";; #pass all parameters except $0,$1
+  delete) __fzfSelect delete;;
+  edit) __fzfSelect edit;;
+  init) __configInit;;
+  current) __configGetCurrent;;
+  use) __configUseZet "$2";;
+  link) __link "$2";;
+
+  *) echo error;;
+esac
