@@ -33,6 +33,7 @@ zetPublicDir=$HOME/Repos/github.com/SimonWoodtli/zet
 zetPrivateDir=$HOME/Private/zet
 downloadDir=$HOME/Downloads
 screenshotDir=$HOME/Pictures/Screenshots
+scriptName="${0##*/}"
 EOF
 }
 ########################### crucial zet tests ##########################
@@ -43,7 +44,7 @@ source "$configFile"
 ## Else set it to path of private zet.
 [[ "$current" == public ]] && zetDir="$zetPublicDir" || zetDir="$zetPrivateDir"
 ############################## config cmds #############################
-__configGetCurrent() { echo "$current" ; }
+__configPrintCurrentZetDir() { echo "$current" ; }
 __configUseZet() { 
   case "$1" in
     public|Public) sed -i 's|current=.*|current=public|' "$configFile" ;;
@@ -53,7 +54,15 @@ __configUseZet() {
 }
 ############################### utilities ##############################
 _isoSec() { date -u +%Y%m%d%H%M%S; }
-
+_urlencode() { 
+  local keywords="$1"
+  local keywordsEncoded
+  for (( i=0; i<${#keywords}; i++ )); do
+    [[ "${keywords:$i:1}" =~ [[:blank:]] ]] && keywordsEncoded+="%20" || keywordsEncoded+="${keywords:$i:1}"
+  done
+  ## bash can only return exit status, this is the next best thing I figured
+  echo "$keywordsEncoded"
+}
 ################################ create ################################
 __create() {
   ## create file
@@ -84,6 +93,52 @@ _createPushGit() {
   git add -A "$dir" &>/dev/null
   git commit -m "$title" &>/dev/null
   git push &>/dev/null
+}
+############################ search commands ###########################
+__printReferenceLinkLines() {
+  [[ -z "$1" ]] && echo "${blue}Hint:$reset Missing search query. Use ${bold}\`zet link <searchterm>\`$reset" && return 1
+  local -a addLinkLine=()
+  local -i i=0
+  ## create ripgrep keyword string with pipes. The idea is that if multiple
+  ## keywords are being used they are filtered with an AND logic.
+  local keywords="$@"
+  local keywordRgLine
+  for keyword in $keywords; do
+    keywordRgLine+="rg -i --no-heading $keyword|"
+  done
+  ## remove the last pipe from string
+  keywordRgLine="${keywordRgLine%|}"
+  ## loop over all dir in zetDir
+  for dir in "$zetDir"/*; do
+    ## grab title of current zetdir empty variable if keyword not found. 
+    filterFirstLine="$(head -n1 "$dir/README.md" 2>/dev/null | eval "$keywordRgLine" | sed 's|#[[:blank:]]||')"
+    ## if it already finds keyword in title skip checking the tagline. To
+    ## avoid double entries
+    if [[ -n "$filterFirstLine" ]]; then
+      ## add title to array
+      addLinkLine[$i]="* [${dir##*/}](/${dir##*/}/) $filterFirstLine"
+      i+=1
+      ## skip rest of loop. loop over next zetdir
+      continue
+    fi
+    ## store last line
+    filterLastLine="$(tail -n 1 "$dir/README.md" 2>/dev/null | eval "$keywordRgLine" )"
+    ## check if last line has same structure to tagline
+    if [[ "$filterLastLine" =~ ^[[:blank:]]{4}\#.*$ ]]; then
+      ## add the tagline title to array
+      addLinkLine[$i]+="* [${dir##*/}](/${dir##*/}/) $(head -n1 "$dir/README.md" 2>/dev/null | sed 's|#[[:blank:]]||')"
+      i+=1
+    fi
+  done
+  printf '%s\n' "${addLinkLine[@]}"
+}
+
+__printGithubQueryLine() {
+  local keywords="$*"
+  #_urlencode "$keywords"
+  [[ -z "$1" ]] && echo "${blue}Hint:$reset Missing search query. Use ${bold}\`zet query <searchterm>\`$reset" && return 1
+  local link="https://github.com/$GITUSER/$scriptName/search?q=$(_urlencode "$keywords")"
+  echo "[$keywords]: <$link>"
 }
 
 ######################## fzf dependent functions #######################
@@ -165,32 +220,6 @@ _editPushGit() {
   git push &>/dev/null
 }
 
-__link() {
-  ## filter and merge lines
-  local -a addLinkLine=()
-  local -i i=0
-  ## loop over all dir in zetDir
-  for dir in "$zetDir"/*; do
-    filterFirstLine="$(head -n1 "$dir/README.md" 2>/dev/null | rg -i "$1" | sed 's|#[[:blank:]]||')"
-    ## if it already finds keyword in title skip checking the tagline
-    #echo $dir
-    if [[ -n "$filterFirstLine" ]]; then
-      ## add title to array
-      addLinkLine[$i]="* [${dir##*/}](/${dir##*/}/) $filterFirstLine"
-      i+=1
-      continue
-    fi
-    ## store last line
-    filterLastLine="$(tail -n 1 "$dir/README.md" 2>/dev/null | rg -i "$1")"
-    ## check if last line has same structure to tagline
-    if [[ "$filterLastLine" =~ ^[[:blank:]]{4}\#.*$ ]]; then
-      ## add the tagline title to array
-      addLinkLine[$i]+="* [${dir##*/}](/${dir##*/}/) $(head -n1 "$dir/README.md" 2>/dev/null | sed 's|#[[:blank:]]||')"
-      i+=1
-    fi
-  done
-  printf '%s\n' "${addLinkLine[@]}"
-}
 
 ## first layer case: for arguments the user passes into zet, dynamic
 case "$1" in
@@ -198,9 +227,10 @@ case "$1" in
   delete) __fzfSelect delete;;
   edit) __fzfSelect edit;;
   init) __configInit;;
-  current) __configGetCurrent;;
+  current) __configPrintCurrentZetDir;;
   use) __configUseZet "$2";;
-  link) __link "$2";;
+  link) __printReferenceLinkLines "${@:2}";;
+  query) __printGithubQueryLine "${@:2}";;
 
   *) echo error;;
 esac
