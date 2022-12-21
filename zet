@@ -78,7 +78,7 @@ __create() {
   ## push file to remote git repo
   _createPushGit
 } 
-_createEditFile() { "$EDITOR" "$readme" ; }
+_createEditFile() { "$editor" "$readme" ; }
 _createPushGit() {
   ## check if readme.md is empty, if so abort git commands
   [[ -s "$readme" ]] || return 1
@@ -167,20 +167,33 @@ __fzfSelect() {
     echo "$element"; done                                                     \
     | fzf --no-preview      `#pipe each Title and possible Tagline into fzf`  \
     | sed -r 's|[[:blank:]]{4}#[a-z].*$||g')" `#remove the tags from string`
+  ## absolute path to readme file
+  local readme="$( rg --no-heading -N -l -x --type md "$selectTitleLine" "$zetDir" )"
+  ## absolute path to dir, remove README.md suffix
+  local dir="${readme%R*}"
+
   ## case for arguments passed into it from first layer case, hardcoded
   case  "$1" in
   ## edit file from fzf selection
-    edit) _edit ;;
-    delete) _delete;;
+    edit) _editReadme ;;
+    delete) _deleteReadme;;
+    get) _printDirPath ;;
+    body) _printBodyReadme ;;
     *)
   esac
 }
-
-_delete() {
-  local dir="$(rg --no-heading -N "^""$selectTitleLine""$" "$zetDir" | head -n1 | sed 's|/README.md:.*||g')"
-  rm -rf "$dir"
-  _deletePushGit
+_printBodyReadme() {
+  ## test if readme has tagline if yes remove last 3 lines and first two
+  ## lines for the title. Else just remove the first two lines
+  local bodyReadme
+  [[ $(tail -n 1 "$readme") =~ ^[[:blank:]]{4}\#.*$ ]]                        \
+    && bodyReadme="$( head -n -3 "$readme" | tail -n +3 )" `#rm tag and title`\
+    || bodyReadme="$( tail -n +3 "$readme")"               `#rm title`
+  echo "$bodyReadme"
 }
+_printDirPath() { echo "$dir" ; }
+_deleteReadme() { rm -rf "$dir" ; _deletePushGit ; }
+
 _deletePushGit() {
   ## TODO create an array from all the selected files
   #local -a deletedZet=( "$( git ls-files --deleted )" )
@@ -194,13 +207,9 @@ _deletePushGit() {
   git add -A "$dir" &>/dev/null
   git commit -m "$title" &>/dev/null
   git push &>/dev/null
-
 }
-_edit() {
-  local dir="$(rg --no-heading -N "^""$selectTitleLine""$" "$zetDir" | head -n1 | sed 's|/README.md:.*||g')"
-  local readme="$dir/README.md" #absolute path
-  #echo "$readme"
-  "$EDITOR" "$readme"
+_editReadme() {
+  "$editor" "$readme"
   exit
   _editPushGit
 }
@@ -231,6 +240,8 @@ case "$1" in
   use) __configUseZet "$2";;
   link) __printReferenceLinkLines "${@:2}";;
   query) __printGithubQueryLine "${@:2}";;
+  get) __fzfSelect get;;
+  body) __fzfSelect body;;
 
   *) echo error;;
 esac
