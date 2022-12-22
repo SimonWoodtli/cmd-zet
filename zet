@@ -140,6 +140,36 @@ __printGithubQueryLine() {
   local link="https://github.com/$GITUSER/$scriptName/search?q=$(_urlencode "$keywords")"
   echo "[$keywords]: <$link>"
 }
+################################# stuff ################################
+__editLastModifiedReadme() {
+  ## Q: What is better performance wise?
+  ## Method 1: Two loops, seems more sane less command repetition
+  ##loop: list all files with modification timestamp
+  local lastModifiedReadmeDate="$( for f in "$zetDir"/*/README.md; do         \
+    date -r "$f" +"%Y-%m-%d-%H-%M-%S"; done                                   \
+    | sort -n                   `#once loop finished sort those timestamps`   \
+    | tail -n 1)"               `#filter by last entry`            
+  ## loop again with mod timestamp and check which timestamp matches the
+  ## last entry of the first loop. If found store file location
+  for f in "$zetDir"/*/README.md; do 
+    modifiedReadmeDate=$(date -r "$f" +"%Y-%m-%d-%H-%M-%S")
+    [[ $modifiedReadmeDate == $lastModifiedReadmeDate ]] && local readme="$f"
+  done
+  ## edit readme and if changes are made git push them
+  _editReadme
+
+  ## Method 2: One loop that invokes subshell at every iteration
+  #local -a modifiedReadme=()
+  #local -i i=0
+  #local lastModifiedReadme
+  #for f in "$zetDir"/*/*; do 
+  #  readmePath+=( "$f" )
+  #  modifiedReadme+=( "$(date -ur "$f" +"%Y%m%d%H%M%S")" )
+  #  sorted=($(printf '%s\n' "${modifiedReadme[@]}"|sort|tail -n 1))
+  #  [[ "$sorted" -eq "${modifiedReadme[$i]}" ]] && lastModifiedReadme="${readmePath[$i]}" 
+  #  i+=1
+  #done
+}
 
 ######################## fzf dependent functions #######################
 
@@ -179,9 +209,11 @@ __fzfSelect() {
     delete) _deleteReadme;;
     get) _printDirPath ;;
     body) _printBodyReadme ;;
+    cat) _printReadme ;;
     *)
   esac
 }
+_printReadme() { cat "$readme" ; }
 _printBodyReadme() {
   ## test if readme has tagline if yes remove last 3 lines and first two
   ## lines for the title. Else just remove the first two lines
@@ -193,7 +225,6 @@ _printBodyReadme() {
 }
 _printDirPath() { echo "$dir" ; }
 _deleteReadme() { rm -rf "$dir" ; _deletePushGit ; }
-
 _deletePushGit() {
   ## TODO create an array from all the selected files
   #local -a deletedZet=( "$( git ls-files --deleted )" )
@@ -233,15 +264,19 @@ _editPushGit() {
 ## first layer case: for arguments the user passes into zet, dynamic
 case "$1" in
   create) __create "${@:2}";; #pass all parameters except $0,$1
-  delete) __fzfSelect delete;;
-  edit) __fzfSelect edit;;
   init) __configInit;;
+  ##TODO
+  [[:blank:]]) __configInit;; #doesnt work. If u run `zet` I want it to init too
   current) __configPrintCurrentZetDir;;
   use) __configUseZet "$2";;
   link) __printReferenceLinkLines "${@:2}";;
   query) __printGithubQueryLine "${@:2}";;
+  last) __editLastModifiedReadme ;;
+  delete) __fzfSelect delete;;
+  edit) __fzfSelect edit;;
   get) __fzfSelect get;;
   body) __fzfSelect body;;
+  cat) __fzfSelect cat;;
 
   *) echo error;;
 esac
