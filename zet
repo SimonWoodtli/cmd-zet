@@ -16,7 +16,6 @@ declare bold=$'\033[1m'
 
 declare configFile="$HOME/.config/zet/config"
 declare zetDir
-declare -A HELP
 ############################## config init #############################
 __configInit() {
   ## check if zet config dir exists or create it
@@ -134,7 +133,6 @@ __printReferenceLinkLines() {
   done
   printf '%s\n' "${addLinkLine[@]}"
 }
-
 __printGithubQueryLine() {
   local keywords="$*"
   #_urlencode "$keywords"
@@ -172,7 +170,48 @@ __editLastModifiedReadme() {
   #  i+=1
   #done
 }
+__countReadme() { fd . "$zetDir" --type d | wc -l ; }
+############################# help commands ############################
+__usage() {
+  ## associative arrays are unordered for this loop to work order is
+  ## required hence the second regular array 'orderCommands'
+  printf "%s\n\n" "${yellow}COMMANDS:$reset"
+  for (( i=0; $i < ${#orderCommands[@]}; i+=1 )); do
+    key="${orderCommands[$i]}"
+    [[ "$i" -ge 11 ]] && echo "    zet $key <pattern>" && continue
+    echo "    zet $key"
+  done
+}
+__help() {
+  cat <<EOF
+${yellow}NAME:$reset
+    zet - a command line tool to manage a git Zettelkasten repository.
 
+${yellow}INSTALL:$reset
+    Installation instructions can be found on the project's website.
+
+${yellow}USAGE:$reset
+    zet [OPTIONS] [<subcommand>] [<pattern>]...
+
+${yellow}ARGS:$reset
+    ${green}<subcommand>$reset
+          The subcommand which invokes different functionalities to manage Zettel (notes).
+    ${green}<pattern>$reset
+          The pattern for some subcommands to search keywords, add title etc.
+
+${yellow}OPTIONS:$reset
+    ${green}-h$reset, ${green}--help$reset
+          Show help information
+    ${green}-v$reset, ${green}--version$reset
+          Show version information
+    ${green}-u$reset, ${green}--usage$reset
+          List all commands
+
+${yellow}ABOUT:$reset
+    Project: https://github.com/simonwoodtli/cmd-zet
+    Author: Simon Donald Woodtli <simonwoodtli@posteo.net>
+EOF
+}
 ######################## fzf dependent functions #######################
 
 ## fzf functions to edit files
@@ -247,7 +286,6 @@ _editReadme() {
   exit
   _editPushGit
 }
-
 _editPushGit() {
   cd "$dir" &>/dev/null
   ## TODO check if any changes where made, if not abort git
@@ -262,27 +300,35 @@ _editPushGit() {
   git commit -m "$title" &>/dev/null
   git push &>/dev/null
 }
-
 ################################# main #################################
+## create associative array with key value pairs
+## since associative array come unordered another regular array is needed too
+declare -A commands;                              declare -a orderCommands;
+commands[init]="__configInit";                    orderCommands+=( "init" )
+commands[current]="__configPrintCurrentZetDir";   orderCommands+=( "current" )
+commands[last]="__editLastModifiedReadme";        orderCommands+=( "last" )
+commands[delete]="__fzfSelect delete";            orderCommands+=( "delete" )
+commands[edit]="__fzfSelect edit";                orderCommands+=( "edit" )
+commands[get]="__fzfSelect get";                  orderCommands+=( "get" )
+commands[body]="__fzfSelect body";                orderCommands+=( "body" )
+commands[cat]="__fzfSelect cat";                  orderCommands+=( "cat" )
+commands[count]="__countReadme";                  orderCommands+=( "count" )
+commands[help]="__help";                          orderCommands+=( "help" )
+commands[usage]="__usage";                        orderCommands+=( "usage" )
+## command with <patterns>
+commands[use]="__configUseZet";                   orderCommands+=( "use" )
+commands[create]="__create";                      orderCommands+=( "create" )
+commands[link]="__printReferenceLinkLines";       orderCommands+=( "link" )
+commands[query]="__printGithubQueryLine";         orderCommands+=( "query" )
+## case for options
+case "$1" in
+  --help|-h) __help;;
+  --usage|-u) __usage;;
+  --version|-v) __version;;
+  *) echo $1;;
+esac
 ## TODO if you run `zet` solve error
 declare subcommand="$1"; shift
-
-## create associative array with key value pairs
-declare -A commands=(
-  [init]="__configInit"
-  [current]="__configPrintCurrentZetDir"
-  [use]="__configUseZet"
-  [link]="__printReferenceLinkLines"
-  [query]="__printGithubQueryLine"
-  [last]="__editLastModifiedReadme"
-  [create]="__create"
-  [delete]="__fzfSelect delete"
-  [edit]="__fzfSelect edit"
-  [get]="__fzfSelect get"
-  [body]="__fzfSelect body"
-  [cat]="__fzfSelect cat"
-)
-
 ## loop over keys and check if they match user input, if so exec
 ## function call from $1 argument
 for key in ${!commands[@]}; do
@@ -292,7 +338,6 @@ for key in ${!commands[@]}; do
     exit 0
   fi
 done
-
 ######################### Tab Completion Context ########################
 ## Tab completion - add to bashrc: complete -C zet zet
 if [ -n "$COMP_LINE" ]; then
