@@ -1,22 +1,21 @@
 #!/bin/sh
 ## my own `zet` command in the making
-#set -e                                                                          
+#set -e
 shopt -s extglob
 ########################### global variables ###########################
-declare red=$'\033[31m'                                                         
-declare black=$'\033[30m'                                                       
-declare green=$'\033[32m'                                                       
-declare yellow=$'\033[33m'                                                      
-declare blue=$'\033[34m'                                                        
-declare magenta=$'\033[35m'                                                     
-declare cyan=$'\033[36m'                                                        
-declare white=$'\033[37m'                                                       
-declare reset=$'\033[0m'                                                        
-declare bold=$'\033[1m'  
+declare red=$'\033[31m'
+declare black=$'\033[30m'
+declare green=$'\033[32m'
+declare yellow=$'\033[33m'
+declare blue=$'\033[34m'
+declare magenta=$'\033[35m'
+declare cyan=$'\033[36m'
+declare white=$'\033[37m'
+declare reset=$'\033[0m'
+declare bold=$'\033[1m'
 
 declare configFile="$HOME/.config/zet/config"
 declare zetDir
-declare -A HELP
 ############################## config init #############################
 __configInit() {
   ## check if zet config dir exists or create it
@@ -40,12 +39,14 @@ EOF
 ## test if configfile exits if not run the initialize command
 [[ -f "$configFile" ]] || __configInit
 source "$configFile"
-## read config file if current is set to public set zetDir to path of public zet. 
+## read config file if current is set to public set zetDir to path of public zet.
 ## Else set it to path of private zet.
 [[ "$current" == public ]] && zetDir="$zetPublicDir" || zetDir="$zetPrivateDir"
 ############################## config cmds #############################
 __configPrintCurrentZetDir() { echo "$current" ; }
-__configUseZet() { 
+__configUseZet() {
+  ## case for arguments passed into it from associative array "commands" value.
+  ## see title: main
   case "$1" in
     public|Public) sed -i 's|current=.*|current=public|' "$configFile" ;;
     private|Private) sed -i 's|current=.*|current=private|' "$configFile" ;;
@@ -54,7 +55,7 @@ __configUseZet() {
 }
 ############################### utilities ##############################
 _isoSec() { date -u +%Y%m%d%H%M%S; }
-_urlencode() { 
+_urlencode() {
   local keywords="$1"
   local keywordsEncoded
   for (( i=0; i<${#keywords}; i++ )); do
@@ -69,7 +70,7 @@ __create() {
   local dir="$zetDir/$(_isoSec)" #absolute path
   #dir="$(x.dir)/$(x.isoSec)" #TODO initial confifile that stores public/private zet dir
   local readme="$dir/README.md" #absolute path
-  local title="$*" 
+  local title="$*"
   ##TODO WHY not just use title, whats the point of line variable???J
   mkdir -p "$dir"
   printf "# %s\n\n" "$title" > "$readme"
@@ -77,7 +78,7 @@ __create() {
   _createEditFile
   ## push file to remote git repo
   _createPushGit
-} 
+}
 _createEditFile() { "$editor" "$readme" ; }
 _createPushGit() {
   ## check if readme.md is empty, if so abort git commands
@@ -110,7 +111,7 @@ __printReferenceLinkLines() {
   keywordRgLine="${keywordRgLine%|}"
   ## loop over all dir in zetDir
   for dir in "$zetDir"/*; do
-    ## grab title of current zetdir empty variable if keyword not found. 
+    ## grab title of current zetdir empty variable if keyword not found.
     filterFirstLine="$(head -n1 "$dir/README.md" 2>/dev/null | eval "$keywordRgLine" | sed 's|#[[:blank:]]||')"
     ## if it already finds keyword in title skip checking the tagline. To
     ## avoid double entries
@@ -132,7 +133,6 @@ __printReferenceLinkLines() {
   done
   printf '%s\n' "${addLinkLine[@]}"
 }
-
 __printGithubQueryLine() {
   local keywords="$*"
   #_urlencode "$keywords"
@@ -148,10 +148,10 @@ __editLastModifiedReadme() {
   local lastModifiedReadmeDate="$( for f in "$zetDir"/*/README.md; do         \
     date -r "$f" +"%Y-%m-%d-%H-%M-%S"; done                                   \
     | sort -n                   `#once loop finished sort those timestamps`   \
-    | tail -n 1)"               `#filter by last entry`            
+    | tail -n 1)"               `#filter by last entry`
   ## loop again with mod timestamp and check which timestamp matches the
   ## last entry of the first loop. If found store file location
-  for f in "$zetDir"/*/README.md; do 
+  for f in "$zetDir"/*/README.md; do
     modifiedReadmeDate=$(date -r "$f" +"%Y-%m-%d-%H-%M-%S")
     [[ $modifiedReadmeDate == $lastModifiedReadmeDate ]] && local readme="$f"
   done
@@ -162,15 +162,56 @@ __editLastModifiedReadme() {
   #local -a modifiedReadme=()
   #local -i i=0
   #local lastModifiedReadme
-  #for f in "$zetDir"/*/*; do 
+  #for f in "$zetDir"/*/*; do
   #  readmePath+=( "$f" )
   #  modifiedReadme+=( "$(date -ur "$f" +"%Y%m%d%H%M%S")" )
   #  sorted=($(printf '%s\n' "${modifiedReadme[@]}"|sort|tail -n 1))
-  #  [[ "$sorted" -eq "${modifiedReadme[$i]}" ]] && lastModifiedReadme="${readmePath[$i]}" 
+  #  [[ "$sorted" -eq "${modifiedReadme[$i]}" ]] && lastModifiedReadme="${readmePath[$i]}"
   #  i+=1
   #done
 }
+__countReadme() { fd . "$zetDir" --type d | wc -l ; }
+############################# help commands ############################
+__usage() {
+  ## associative arrays are unordered for this loop to work order is
+  ## required hence the second regular array 'orderCommands'
+  printf "%s\n\n" "${yellow}COMMANDS:$reset"
+  for (( i=0; $i < ${#orderCommands[@]}; i+=1 )); do
+    key="${orderCommands[$i]}"
+    [[ "$i" -ge 11 ]] && echo "    zet $key <pattern>" && continue
+    echo "    zet $key"
+  done
+}
+__help() {
+  cat <<EOF
+${yellow}NAME:$reset
+    zet - a command line tool to manage a git Zettelkasten repository.
 
+${yellow}INSTALL:$reset
+    Installation instructions can be found on the project's website.
+
+${yellow}USAGE:$reset
+    zet [OPTIONS] [<subcommand>] [<pattern>]...
+
+${yellow}ARGS:$reset
+    ${green}<subcommand>$reset
+          The subcommand which invokes different functionalities to manage Zettel (notes).
+    ${green}<pattern>$reset
+          The pattern for some subcommands to search keywords, add title etc.
+
+${yellow}OPTIONS:$reset
+    ${green}-h$reset, ${green}--help$reset
+          Show help information
+    ${green}-v$reset, ${green}--version$reset
+          Show version information
+    ${green}-u$reset, ${green}--usage$reset
+          List all commands
+
+${yellow}ABOUT:$reset
+    Project: https://github.com/simonwoodtli/cmd-zet
+    Author: Simon Donald Woodtli <simonwoodtli@posteo.net>
+EOF
+}
 ######################## fzf dependent functions #######################
 
 ## fzf functions to edit files
@@ -178,7 +219,7 @@ __fzfSelect() {
   ## filter and merge lines
   local -a mergeTitleTag=()
   local -i i=0
-  for f in "$zetDir"/*; do 
+  for f in "$zetDir"/*; do
     filterLastLine="$(tail -n 1 "$f"/README.md 2>/dev/null)"
     filterFirstLine="$(head -n1 "$f"/README.md 2>/dev/null)"
     #echo "$(tail -n 1 "$f"/README.md 2>/dev/null)"
@@ -202,7 +243,8 @@ __fzfSelect() {
   ## absolute path to dir, remove README.md suffix
   local dir="${readme%R*}"
 
-  ## case for arguments passed into it from first layer case, hardcoded
+  ## case for arguments passed into it from associative array "commands" value.
+  ## see title: main
   case  "$1" in
   ## edit file from fzf selection
     edit) _editReadme ;;
@@ -244,7 +286,6 @@ _editReadme() {
   exit
   _editPushGit
 }
-
 _editPushGit() {
   cd "$dir" &>/dev/null
   ## TODO check if any changes where made, if not abort git
@@ -259,24 +300,49 @@ _editPushGit() {
   git commit -m "$title" &>/dev/null
   git push &>/dev/null
 }
-
-
-## first layer case: for arguments the user passes into zet, dynamic
+################################# main #################################
+## create associative array with key value pairs
+## since associative array come unordered another regular array is needed too
+declare -A commands;                              declare -a orderCommands;
+commands[init]="__configInit";                    orderCommands+=( "init" )
+commands[current]="__configPrintCurrentZetDir";   orderCommands+=( "current" )
+commands[last]="__editLastModifiedReadme";        orderCommands+=( "last" )
+commands[delete]="__fzfSelect delete";            orderCommands+=( "delete" )
+commands[edit]="__fzfSelect edit";                orderCommands+=( "edit" )
+commands[get]="__fzfSelect get";                  orderCommands+=( "get" )
+commands[body]="__fzfSelect body";                orderCommands+=( "body" )
+commands[cat]="__fzfSelect cat";                  orderCommands+=( "cat" )
+commands[count]="__countReadme";                  orderCommands+=( "count" )
+commands[help]="__help";                          orderCommands+=( "help" )
+commands[usage]="__usage";                        orderCommands+=( "usage" )
+## command with <patterns>
+commands[use]="__configUseZet";                   orderCommands+=( "use" )
+commands[create]="__create";                      orderCommands+=( "create" )
+commands[link]="__printReferenceLinkLines";       orderCommands+=( "link" )
+commands[query]="__printGithubQueryLine";         orderCommands+=( "query" )
+## case for options
 case "$1" in
-  create) __create "${@:2}";; #pass all parameters except $0,$1
-  init) __configInit;;
-  ##TODO
-  [[:blank:]]) __configInit;; #doesnt work. If u run `zet` I want it to init too
-  current) __configPrintCurrentZetDir;;
-  use) __configUseZet "$2";;
-  link) __printReferenceLinkLines "${@:2}";;
-  query) __printGithubQueryLine "${@:2}";;
-  last) __editLastModifiedReadme ;;
-  delete) __fzfSelect delete;;
-  edit) __fzfSelect edit;;
-  get) __fzfSelect get;;
-  body) __fzfSelect body;;
-  cat) __fzfSelect cat;;
-
-  *) echo error;;
+  --help|-h) __help;;
+  --usage|-u) __usage;;
+  --version|-v) __version;;
+  *) echo $1;;
 esac
+## TODO if you run `zet` solve error
+declare subcommand="$1"; shift
+## loop over keys and check if they match user input, if so exec
+## function call from $1 argument
+for key in ${!commands[@]}; do
+  if [[ $key == "$subcommand" ]]; then
+    eval "${commands[${key}]}" $*
+    #echo "${commands[${key}]}" $*
+    exit 0
+  fi
+done
+######################### Tab Completion Context ########################
+## Tab completion - add to bashrc: complete -C zet zet
+if [ -n "$COMP_LINE" ]; then
+  for cmd in ${!commands[@]}; do
+    [[ "${cmd:0:${#1}}" == "$1" ]] && echo $cmd
+  done
+  exit 0
+fi
