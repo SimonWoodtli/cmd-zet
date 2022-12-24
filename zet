@@ -1,6 +1,9 @@
 #!/bin/sh
-## my own `zet` command in the making
-#set -e
+## Author: Simon D. Woodtli
+## Project: https://github.com/SimonWoodtli/cmd-zet
+## License:  Apache-2.0
+#
+## TODO anything that returns one line like `zet get` should also be xcliped
 shopt -s extglob
 ########################### global variables ###########################
 declare red=$'\033[31m'
@@ -14,8 +17,12 @@ declare white=$'\033[37m'
 declare reset=$'\033[0m'
 declare bold=$'\033[1m'
 
+## global variables also get sourced from configFile
 declare configFile="$HOME/.config/zet/config"
 declare zetDir
+declare -A commands
+declare -a orderCommands
+declare subcommand
 ############################## config init #############################
 __configInit() {
   ## check if zet config dir exists or create it
@@ -31,13 +38,29 @@ current=public
 zetPublicDir=$HOME/Repos/github.com/SimonWoodtli/zet
 zetPrivateDir=$HOME/Private/zet
 downloadDir=$HOME/Downloads
-screenshotDir=$HOME/Pictures/Screenshots
+screenshotDir=$HOME/Pictures
 scriptName="${0##*/}"
 EOF
 }
 ########################### crucial zet tests ##########################
+## Check dependencies:
+_checkDependencies() {
+  ## imageMagick is also a dependency
+  local -a dependencies=( fzf fd rg sed xclip git gnome-screenshot )
+  local -a missingDependencies=()
+  for dependency in "${dependencies[@]}"; do
+    command -v "$dependency" >/dev/null 2>&1 || missingDependencies+=( "$dependency" )
+  done
+  if [[ -n "${missingDependencies[@]}" ]]; then
+    echo "${red}ERROR:$reset Missing dependency(ies): ${bold}"${missingDependencies[@]}"$reset"
+    exit 1
+  fi
+}
+_checkDependencies
+#set -e
 ## test if configfile exits if not run the initialize command
 [[ -f "$configFile" ]] || __configInit
+## load configFile variables to global variables
 source "$configFile"
 ## read config file if current is set to public set zetDir to path of public zet.
 ## Else set it to path of private zet.
@@ -64,14 +87,22 @@ _urlencode() {
   ## bash can only return exit status, this is the next best thing I figured
   echo "$keywordsEncoded"
 }
+_newest() {
+  local IFS=$'\n'
+  ## create array and sort elements by time, also ${1:-.}/*
+  ## lists files with absolute path where $1 would simply list files
+  #local -a f=($(ls -1 --color=never -t ${1:-.}/*))
+  local -a f=($(ls -1 --color=never -trd ${1:-.}/*))
+  ## print the last element of array
+  echo "${f[-1]}"
+  #echo "${f[0]}"
+}
 ################################ create ################################
 __create() {
   ## create file
   local dir="$zetDir/$(_isoSec)" #absolute path
-  #dir="$(x.dir)/$(x.isoSec)" #TODO initial confifile that stores public/private zet dir
   local readme="$dir/README.md" #absolute path
   local title="$*"
-  ##TODO WHY not just use title, whats the point of line variable???J
   mkdir -p "$dir"
   printf "# %s\n\n" "$title" > "$readme"
   ## edit file
@@ -94,6 +125,36 @@ _createPushGit() {
   git add -A "$dir" &>/dev/null
   git commit -m "$title" &>/dev/null
   git push &>/dev/null
+}
+__createScreenshot() {
+  local isoSec="$(_isoSec)"
+  local dir="$zetDir/$isoSec" #absolute path
+  local readme="$dir/README.md" #absolute path
+  local title="$*"
+  ## test if title is not empty
+  [[ -n "$title" ]] || { echo "${red}ERROR:$reset Missing pattern. Please pass a title when you call it. Use ${bold}\`zet screenshot <title>\`$reset"; exit 1; }
+  mkdir -p "$dir" || { echo "${red}Error:$reset Unable to create directory ${bold}$dir${reset}">&2; exit 1; }
+  ## create screenshot, if you like to use another tool replace the gnome-screenshot command
+  gnome-screenshot -a 2>/dev/null || { echo "${red}Error:$reset Unable to create screenshot."; exit 1; }
+  ## get latest created screenshot path
+  local imagePath=$(_newest "$screenshotDir") #absolute path
+  ## find out the images width and height
+  local width=$(identify -format %w "$imagePath" 2>/dev/null)
+  local height=$(identify -format %h "$imagePath" 2>/dev/null)
+  ## imagePath can also refer to a dir if no Screenshot gets created.
+  ## Then it moves the whole dir into your Zettel this test prevents this.
+  ## This test checks if a width|height exists else it exits
+  [[ -n "$width" || -n "$height" ]] || { echo "${red}ERROR:$reset Screenshot width or height could not be identified. Did you actually create a screenshot?"; exit 1; }
+  local imageName="Screenshot-$isoSec-${width}x${height}.png"
+  ## mv image into new Zettel dir and rename it
+  mv "$imagePath" "$dir/$imageName" || { echo "${red}Error:$reset Unable to move screenshot."; exit 1; }
+  ## print content into readme
+  printf "%s\n\n%s\n" "# 🖼️ $title" "![]($imageName)" > "$readme"
+  ## test if new zettel folder is not more than 1MB otherwise exit
+  local dirSize="$(\du -s "$dir" | awk '{print $1}')"
+  [[ "$dirSize" -le 1000 ]] || { echo "${red}Error:$reset Screenshot size is limited to 1MB. Zettel: ${bold}${dir##*/}${reset}" >&2; exit 1; }
+  ## commit and push files to git remote
+  _createPushGit
 }
 ############################ search commands ###########################
 __printReferenceLinkLines() {
@@ -157,7 +218,6 @@ __editLastModifiedReadme() {
   done
   ## edit readme and if changes are made git push them
   _editReadme
-
   ## Method 2: One loop that invokes subshell at every iteration
   #local -a modifiedReadme=()
   #local -i i=0
@@ -212,9 +272,7 @@ ${yellow}ABOUT:$reset
     Author: Simon Donald Woodtli <simonwoodtli@posteo.net>
 EOF
 }
-######################## fzf dependent functions #######################
-
-## fzf functions to edit files
+##################### fzfSelect dependent functions ####################
 __fzfSelect() {
   ## filter and merge lines
   local -a mergeTitleTag=()
@@ -241,7 +299,7 @@ __fzfSelect() {
   ## absolute path to readme file
   local readme="$( rg --no-heading -N -l -x --type md "$selectTitleLine" "$zetDir" )"
   ## absolute path to dir, remove README.md suffix
-  local dir="${readme%R*}"
+  local dir="${readme%/*}"
 
   ## case for arguments passed into it from associative array "commands" value.
   ## see title: main
@@ -271,8 +329,8 @@ _deletePushGit() {
   ## TODO create an array from all the selected files
   #local -a deletedZet=( "$( git ls-files --deleted )" )
   cd "$zetDir" &>/dev/null
-  local dirIsoSec="$(echo $dir | sed 's|.*/||')"
-  local title="Deleted $dirIsoSec"
+  local dirIsoSec="${dir##*/}"
+  local title="Delete $dirIsoSec"
   ## check if dirIsoSec string is empty if so exit
   test -n "$dirIsoSec"
   git pull -q
@@ -303,38 +361,36 @@ _editPushGit() {
 ################################# main #################################
 ## create associative array with key value pairs
 ## since associative array come unordered another regular array is needed too
-declare -A commands;                              declare -a orderCommands;
-commands[init]="__configInit";                    orderCommands+=( "init" )
-commands[current]="__configPrintCurrentZetDir";   orderCommands+=( "current" )
-commands[last]="__editLastModifiedReadme";        orderCommands+=( "last" )
-commands[delete]="__fzfSelect delete";            orderCommands+=( "delete" )
-commands[edit]="__fzfSelect edit";                orderCommands+=( "edit" )
-commands[get]="__fzfSelect get";                  orderCommands+=( "get" )
-commands[body]="__fzfSelect body";                orderCommands+=( "body" )
-commands[cat]="__fzfSelect cat";                  orderCommands+=( "cat" )
-commands[count]="__countReadme";                  orderCommands+=( "count" )
-commands[help]="__help";                          orderCommands+=( "help" )
-commands[usage]="__usage";                        orderCommands+=( "usage" )
+commands[init]="__configInit";                    orderCommands+=("init")
+commands[current]="__configPrintCurrentZetDir";   orderCommands+=("current")
+commands[last]="__editLastModifiedReadme";        orderCommands+=("last")
+commands[delete]="__fzfSelect delete";            orderCommands+=("delete")
+commands[edit]="__fzfSelect edit";                orderCommands+=("edit")
+commands[get]="__fzfSelect get";                  orderCommands+=("get")
+commands[body]="__fzfSelect body";                orderCommands+=("body")
+commands[cat]="__fzfSelect cat";                  orderCommands+=("cat")
+commands[count]="__countReadme";                  orderCommands+=("count")
+commands[help]="__help";                          orderCommands+=("help")
+commands[usage]="__usage";                        orderCommands+=("usage")
+commands[screenshot]="__createScreenshot";        orderCommands+=("screenshot")
 ## command with <patterns>
-commands[use]="__configUseZet";                   orderCommands+=( "use" )
-commands[create]="__create";                      orderCommands+=( "create" )
-commands[link]="__printReferenceLinkLines";       orderCommands+=( "link" )
-commands[query]="__printGithubQueryLine";         orderCommands+=( "query" )
-## case for options
+commands[use]="__configUseZet";                   orderCommands+=("use")
+commands[create]="__create";                      orderCommands+=("create")
+commands[link]="__printReferenceLinkLines";       orderCommands+=("link")
+commands[query]="__printGithubQueryLine";         orderCommands+=("query")
+## case for options/flags
 case "$1" in
   --help|-h) __help;;
   --usage|-u) __usage;;
   --version|-v) __version;;
-  *) echo $1;;
 esac
 ## TODO if you run `zet` solve error
-declare subcommand="$1"; shift
+subcommand="$1"; shift
 ## loop over keys and check if they match user input, if so exec
 ## function call from $1 argument
 for key in ${!commands[@]}; do
   if [[ $key == "$subcommand" ]]; then
     eval "${commands[${key}]}" $*
-    #echo "${commands[${key}]}" $*
     exit 0
   fi
 done
