@@ -2,7 +2,7 @@
 
 This is `zet`, a command line tool for managing your digital Zettelkasten (notebox). Many commands use fzf for easier management of a Zettelkasten repository. `zet` is a bash script that also uses `rg` for faster grep searches and `fd` for better filename search performance.
 
-> 🧐 I strongly recommend using two Zettelkasten git repositories. A public one with a remote git repository on github.com and a private one that exists only as a local wit repository.
+> 🧐 I strongly recommend using two Zettelkasten git repositories. A public one with a remote git repository on github.com and a private one that exists only as a local git repository.
 
 Quick links:
 
@@ -20,8 +20,7 @@ Quick links:
 
 ## Demo
 
-![screencast](assets/screencast.webm)
-<--! link to website with xterm.js and zet on it -->
+[screencast.webm](https://user-images.githubusercontent.com/66033447/209848299-2d3f7c8b-7ee6-4044-b7ef-61a54c78d10b.webm)
 
 ## How to use
 
@@ -110,8 +109,8 @@ Here's a list of some of the things and ideas I adopted. Some I had to modify qu
 
 ## License
 
-Copyright 2022 Simon D. Woodtli <simonwoodtli@posteo.net>
-Released under Apache-2.0 License
+Copyright 2022 Simon D. Woodtli <simonwoodtli@posteo.net>  
+Released under Apache-2.0 License  
 
 [rwxrob]: <https://github.com/rwxrob/>
 [Install]: <#installation>
