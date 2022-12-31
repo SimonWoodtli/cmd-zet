@@ -6,91 +6,85 @@
 ## TODO anything that returns one line like `zet get` should also be xcliped
 ## __functionName() = main function called from user input
 ## _functionName()  = sub function only called from within a main function
+## enable extended globbing:
 shopt -s extglob
 ########################### global variables ###########################
-declare red=$'\033[31m'
-declare black=$'\033[30m'
-declare green=$'\033[32m'
-declare yellow=$'\033[33m'
-declare blue=$'\033[34m'
-declare magenta=$'\033[35m'
-declare cyan=$'\033[36m'
-declare white=$'\033[37m'
-declare reset=$'\033[0m'
-declare bold=$'\033[1m'
+#
+## TODO change color variables in whole script to short version
+declare rd=$'\033[31m'      #red
+declare gn=$'\033[32m'      #green
+declare yw=$'\033[33m'      #yellow
+declare be=$'\033[34m'      #blue
+declare cn=$'\033[36m'      #cyan
+#declare bk=$'\033[30m'     #black
+#declare we=$'\033[37m'     #white
+#declare ma=$'\033[35m'     #magenta
+declare rt=$'\033[0m'       #reset
+declare bd=$'\033[1m'       #bold
 
-## global variables also get sourced from configFile
+## global variables:
 declare configFile="$HOME/.config/zet/config"
 declare zetDir
 declare -A commands
 declare -a orderCommands
 declare subcommand
+declare scriptName="${0##*/}"
+## configFile contains a few more global var.
 ############################## config init #############################
 __configInit() {
-  ## update version (maintainer only)
-  ## before I commit a new git tagged version I nejj
-  cd "$GHREPOS/myrepos/cmd-zet" || return 1
-  ## Get the latest git tag
-  local latestTag="$(git tag | sort -V | tail -n 1)"
-  ## Set the hardcoded value for version (users)
-  local currentVersion="v0.0.1"
-  ## check if they differ if so update version
-  #
-  ## TODO this actually needs testing once i release and git tag repo
-  ## Problem test1:
-  ## first test wouldnt work it only updates the config file for maintainer
-  ## a sed command is required to get this done and replace the hardcoded
-  ## var line
-  #[[ "$currentVersion" == "$latestTag" ]] || currentVersion="$latestTag"
-  ## PROBLEM test2: 
-  ## the user won't have them equal because latestTag will be empty var for them
-  ## Can I actually use sed on the script that I exec on itself? testing
-  #[[ "$currentVersion" == "$latestTag" ]] || sed -i "s|local currentVersion=.*|local currentVersion=$latestTag|" "$GHREPOS/myrepos/cmd-zet/zet"
-
   ## check if zet config dir exists or create it
   [[ -d "${configFile%config}" ]] || mkdir -p "${configFile%config}"
   ## dump config data into file
   _configData | sort > "$configFile"
+  echo "$cn
+███████╗███████╗████████╗    ██╗███╗   ██╗██╗████████╗
+╚══███╔╝██╔════╝╚══██╔══╝    ██║████╗  ██║██║╚══██╔══╝
+  ███╔╝ █████╗     ██║       ██║██╔██╗ ██║██║   ██║
+ ███╔╝  ██╔══╝     ██║       ██║██║╚██╗██║██║   ██║
+███████╗███████╗   ██║       ██║██║ ╚████║██║   ██║
+╚══════╝╚══════╝   ╚═╝       ╚═╝╚═╝  ╚═══╝╚═╝   ╚═╝
+$rt"
 }
 _configData() {
   ## change these settings to your needs
   cat <<EOF
 editor=vim
-current=public
 zetPublicDir=$HOME/Repos/github.com/SimonWoodtli/zet
 zetPrivateDir=$HOME/Private/zet
-downloadDir=$HOME/Downloads
+gitUser=SimonWoodtli
 screenshotDir=$HOME/Pictures
-scriptName="${0##*/}"
-version=$currentVersion
+current=public
 EOF
 }
 ############################# crucial tests ############################
-## Check Bash Version: Only compare Major Version Number
-[[ "${BASH_VERSION:0:1}" -gt 4 ]] || { echo "${yellow}Warning:$reset This script requires Bash version 4+"; exit 1; }
-## Check dependencies:
+_checkBashVersion() {
+  ## Check Bash Version: Only compare Major Version Number
+  local errVersion="${rd}Error:$rt Bash version 4+ required"
+  [[ "${BASH_VERSION:0:1}" -gt 4 ]] || { echo "$errVersion"; return 1; }
+}
 _checkDependencies() {
   ## ImageMagick is also a dependency: `identify` is part of this toolbox
-  local -a dependencies=( fzf fd rg sed awk identify xclip git gnome-screenshot )
-  local -a missingDependencies
-  for dependency in "${dependencies[@]}"; do
-    command -v "$dependency" >/dev/null 2>&1 || missingDependencies+=( "$dependency" )
+  local -a programs=( fzf fd rg sed awk identify xclip git gnome-screenshot )
+  local -a missPrograms
+  for program in "${programs[@]}"; do
+    command -v "$program" >/dev/null 2>&1 || missPrograms+=( "$program" )
   done
-  if [[ -n "${missingDependencies[*]}" ]]; then
-    echo "${red}ERROR:$reset Missing dependency(ies): ${bold}${missingDependencies[*]}$reset"
-    exit 1
+  local errMiss="${rd}Error:$rt Missing dependency(ies): \
+${bd}${missPrograms[*]}$rt"
+  if [[ -n "${missPrograms[*]}" ]]; then
+    echo "$errMiss"
+    return 1
   fi
 }
-_checkDependencies
-#set -e
-## test if configfile exits if not run the initialize command
+## test if configFile exits if not run the initialize command
 [[ -f "$configFile" ]] || __configInit
-## load configFile variables to global variables
-source "$configFile"
-## read config file if current is set to public set zetDir to path of public zet.
-## Else set it to path of private zet.
+## run check functions and source configFile variables or exit
+_checkBashVersion && _checkDependencies && source "$configFile" ||            \
+  { echo "${rd}Error:$rt Check tests failed or couldn't source configFile";   \
+    exit 1; }
+## read configFile if current is set to public set zetDir to path of public zet
+## else set it to path of private zet
 [[ "$current" == public ]] && zetDir="$zetPublicDir" || zetDir="$zetPrivateDir"
-
 ## If no argument is passed into `zet` run initialize
 [[ $# -ne 0 ]] || __configInit
 ############################## config cmds #############################
@@ -98,39 +92,52 @@ __configPrintCurrentZetDir() { echo "$current" ; }
 __configUseZet() {
   ## case for arguments passed into it from associative array "commands" value.
   ## see title: main
+  local hintArgs="${be}Hint:$rt Use ${bd}\`zet use <public|private>\`$rt"
+  [[ -n "$*" ]] || { echo "$hintArgs"; return 1; }
+
   case "$1" in
-    public|Public) sed -i 's|current=.*|current=public|' "$configFile" ;;
-    private|Private) sed -i 's|current=.*|current=private|' "$configFile" ;;
-    *) echo "${yellow}Warning:$reset only values accepted: private, public"
+    public|Public) sed -i 's|current=.*|current=public|' "$configFile"
+      source "$configFile"
+      __configPrintCurrentZetDir;;
+    private|Private) sed -i 's|current=.*|current=private|' "$configFile"
+      source "$configFile"
+      __configPrintCurrentZetDir;;
+    *) echo "${yw}Warning:$rt only values accepted: ${bd}private public$rt"
   esac
 }
 ############################### utilities ##############################
-_isoSec() { date -u +%Y%m%d%H%M%S; }
+_isoSec() { date -u +%Y%m%d%H%M%S; } #get current isosec in UTC
 _urlencode() {
+  ## make sure whitespace gets encoded as %20 for web urls
   local keywords="$1"
   local keywordsEncoded
   for (( i=0; i<${#keywords}; i++ )); do
-    [[ "${keywords:$i:1}" =~ [[:blank:]] ]] && keywordsEncoded+="%20" || keywordsEncoded+="${keywords:$i:1}"
+    [[ "${keywords:$i:1}" =~ [[:blank:]] ]] && keywordsEncoded+="%20" ||      \
+      keywordsEncoded+="${keywords:$i:1}"
   done
   ## bash can only return exit status, this is the next best thing I figured
   echo "$keywordsEncoded"
 }
 _newest() {
   local IFS=$'\n'
-  ## create array "f" and sort elements by time, also ${1:-.}/*
-  ## lists files with absolute path where $1 would simply list files
-  mapfile -t f < <(ls -1 --color=never -trd "${1:-.}"/*)
-  #local -a f=($(ls -1 --color=never -trd ${1:-.}/*))
-  ## print the last element of array
-  echo "${f[-1]}"
+  local -a lsFiles
+  ## ${1:-.}/* lists files with absolute path where $1 would simply list files
+  ## Read the output of the ls command into the lsFiles array
+  mapfile -t lsFiles < <(ls -1 --color=never -trd "${1:-.}"/*)
+  ## print the last element of the lsFiles array, which is the newest file
+  ## in the directory
+  echo "${lsFiles[-1]}"
 }
 ################################ create ################################
 __create() {
-  ## create file
+  local errDir="${rd}Error:$rt Unable to create folder ${bd}$dir${rt}"
+  ## create readme file and git push it
   local dir="$zetDir/$(_isoSec)" #absolute path
   local readme="$dir/README.md" #absolute path
+  ## store user input arguments as title
   local title="$*"
-  mkdir -p "$dir"
+  mkdir -p "$dir" || { echo "$errDir">&2; return 1; }
+  ## create readme with title
   printf "# %s\n\n" "$title" > "$readme"
   ## edit file
   _createEditFile
@@ -139,6 +146,10 @@ __create() {
 }
 _createEditFile() { "$editor" "$readme" ; }
 _createPushGit() {
+  local errTitle="${rd}Error:$rt Missing title."
+  local msgCommit="${gn}Commit:$rt Create ${dir##*/}/README.md - $title"
+  local errCommit="${rd}Error:$rt Commit ${dir##*/}/README.md failed"
+  local errPush="${rd}Error:$rt Push ${dir##*/}/README.md failed"
   ## check if readme.md is empty, if so abort git commands
   [[ -s "$readme" ]] || return 1
   cd "$dir" || return 1
@@ -146,23 +157,31 @@ _createPushGit() {
   local newTitle="$(head -1 "$readme" | sed 's|#\+ *||')"
   [[ "$title" == "$newTitle" ]] || title="$newTitle"
   ## check if title string is not empty or exit
-  test -n "$title"
+  [[ -n "$title" ]] || { echo "$errTitle"; return 1; }
   git pull -q
-  echo "${green}Committing:$reset ${bold}$title${reset}"
   git add -A "$dir" &>/dev/null
-  git commit -m "$title" &>/dev/null
-  git push &>/dev/null
+  git commit -m "$title" &>/dev/null && echo "$msgCommit" ||                  \
+    { echo "$errCommit"; return 1; }
+  git push &>/dev/null || { echo "$errPush"; return 1; }
 }
 __createScreenshot() {
+  local hintTitle="${be}Hint:$rt Use ${bd}\`zet screenshot <title>\`$rt"
+  local errDir="${rd}Error:$rt Unable to create directory ${bd}$dir${rt}"
+  local errScreenshot="${rd}Error:$rt Unable to create screenshot."
+  local errIdentify="${rd}Error:$rt Screenshot width/height could not be set."
+  local errMove="${rd}Error:$rt Unable to move screenshot."
+  local errSize="${rd}Error:$rt Screenshot size is limited to 1MB. \
+Zettel: ${bd}${dir##*/}${rt}"
   local isoSec="$(_isoSec)"
   local dir="$zetDir/$isoSec" #absolute path
   local readme="$dir/README.md" #absolute path
   local title="$*"
-  ## test if title is not empty
-  [[ -n "$title" ]] || { echo "${blue}Hint:$reset Missing title. Use ${bold}\`zet screenshot <title>\`$reset"; exit 1; }
-  mkdir -p "$dir" || { echo "${red}Error:$reset Unable to create directory ${bold}$dir${reset}">&2; exit 1; }
-  ## create screenshot, if you like to use another tool replace the gnome-screenshot command
-  gnome-screenshot -a 2>/dev/null || { echo "${red}Error:$reset Unable to create screenshot."; exit 1; }
+  ## test if arguments for title are not empty
+  [[ -n "$title" ]] || { echo "$hintTitle"; return 1; }
+  mkdir -p "$dir" || { echo "$errDir">&2; return 1; }
+  ## create screenshot, if you like to use another tool replace the
+  ## gnome-screenshot command
+  gnome-screenshot -a 2>/dev/null || { echo "$errScreenshot"; return 1; }
   ## get latest created screenshot path
   local imagePath=$(_newest "$screenshotDir") #absolute path
   ## find out the images width and height
@@ -171,27 +190,28 @@ __createScreenshot() {
   ## imagePath can also refer to a dir if no Screenshot gets created.
   ## Then it moves the whole dir into your Zettel this test prevents this.
   ## This test checks if a width|height exists else it exits
-  [[ -n "$width" || -n "$height" ]] || { echo "${red}ERROR:$reset Screenshot width or height could not be identified. Did you actually create a screenshot?"; exit 1; }
+  [[ -n "$width" || -n "$height" ]] || { echo "$errIdentify"; return 1; }
   local imageName="Screenshot-$isoSec-${width}x${height}.png"
   ## mv image into new Zettel dir and rename it
-  mv "$imagePath" "$dir/$imageName" || { echo "${red}Error:$reset Unable to move screenshot."; exit 1; }
+  mv "$imagePath" "$dir/$imageName" || { echo "$errMove"; return 1; }
   ## print content into readme
   printf "%s\n\n%s\n" "# 🖼️ $title" "![]($imageName)" > "$readme"
   ## test if new zettel folder is not more than 1MB otherwise exit
   local dirSize="$(\du -s "$dir" | awk '{print $1}')"
-  [[ "$dirSize" -le 1000 ]] || { echo "${red}Error:$reset Screenshot size is limited to 1MB. Zettel: ${bold}${dir##*/}${reset}" >&2; exit 1; }
+  [[ "$dirSize" -le 1000 ]] || { echo "$errSize" >&2; return 1; }
   ## commit and push files to git remote
-  exit
   _createPushGit
 }
 ############################ search commands ###########################
 __printReferenceLinkLines() {
-  [[ -z "$1" ]] && echo "${blue}Hint:$reset Missing search query. Use ${bold}\`zet link <searchterm>\`$reset" && return 1
+  local keywords="$*"
+  local hintKeywords="${be}Hint:$rt Missing search query. \
+Use ${bd}\`zet link <searchterm>\`$rt"
+  [[ -n "$keywords" ]] || { echo "$hintKeywords"; return 1; }
   local -a addLinkLine=()
   local -i i=0
   ## create ripgrep keyword string with pipes. The idea is that if multiple
   ## keywords are being used they are filtered with an AND logic.
-  local keywords="$*"
   local keywordRgLine
   for keyword in $keywords; do
     keywordRgLine+="rg -i --no-heading $keyword|"
@@ -201,22 +221,26 @@ __printReferenceLinkLines() {
   ## loop over all dir in zetDir
   for dir in "$zetDir"/*; do
     ## grab title of current zetdir empty variable if keyword not found.
-    filterFirstLine="$(head -n1 "$dir/README.md" 2>/dev/null | eval "$keywordRgLine" | sed 's|#[[:blank:]]||')"
+    title="$(head -n1 "$dir/README.md" 2>/dev/null |                          \
+      eval "$keywordRgLine" | sed 's|#[[:blank:]]||')"
     ## if it already finds keyword in title skip checking the tagline. To
     ## avoid double entries
-    if [[ -n "$filterFirstLine" ]]; then
+    if [[ -n "$title" ]]; then
       ## add title to array
-      addLinkLine[$i]="* [${dir##*/}](/${dir##*/}/) $filterFirstLine"
+      addLinkLine[$i]="* [${dir##*/}](/${dir##*/}/) $title"
       i+=1
       ## skip rest of loop. loop over next zetdir
       continue
     fi
     ## store last line
-    filterLastLine="$(tail -n 1 "$dir/README.md" 2>/dev/null | eval "$keywordRgLine" )"
+    tagline="$(tail -n 1 "$dir/README.md" 2>/dev/null |                       \
+      eval "$keywordRgLine" )"
     ## check if last line has same structure to tagline
-    if [[ "$filterLastLine" =~ ^[[:blank:]]{4}\#.*$ ]]; then
+    if [[ "$tagline" =~ ^[[:blank:]]{4}\#.*$ ]]; then
       ## add the tagline title to array
-      addLinkLine[$i]+="* [${dir##*/}](/${dir##*/}/) $(head -n1 "$dir/README.md" 2>/dev/null | sed 's|#[[:blank:]]||')"
+      local truncateFirstLine="$(head -n1 "$dir/README.md" 2>/dev/null |      \
+        sed 's|#[[:blank:]]||')"
+      addLinkLine[$i]+="* [${dir##*/}](/${dir##*/}/) $truncateFirstLine"
       i+=1
     fi
   done
@@ -224,29 +248,40 @@ __printReferenceLinkLines() {
 }
 __printGithubQueryLine() {
   local keywords="$*"
-  #_urlencode "$keywords"
-  [[ -z "$1" ]] && echo "${blue}Hint:$reset Missing search query. Use ${bold}\`zet query <searchterm>\`$reset" && return 1
-  local link="https://github.com/$GITUSER/$scriptName/search?q=$(_urlencode "$keywords")"
+  local hintKeywords="${be}Hint:$rt Missing search query. \
+Use ${bd}\`zet query <searchterm>\`$rt"
+  [[ -n "$keywords" ]] || { echo "$hintKeywords"; return 1; }
+  local encodeKeywords="$(_urlencode "$keywords")"
+  local link="https://github.com/$gitUser/$scriptName/search?q=$encodeKeywords"
   echo "[$keywords]: <$link>"
 }
 ################################# stuff ################################
 __editLastModifiedReadme() {
-  ## Q: What is better performance wise?
-  ## Method 1: Two loops, seems more sane less command repetition
+  ## Old Method 1: Two loops, seems more sane less command repetition
   ##loop: list all files with modification timestamp
-  local lastModifiedReadmeDate="$( for f in "$zetDir"/*/README.md; do         \
-    date -r "$f" +"%Y-%m-%d-%H-%M-%S"; done                                   \
-    | sort -n                   `#once loop finished sort those timestamps`   \
-    | tail -n 1)"                #filter by last entry
+  #local lastModReadmeDate="$( for f in "$zetDir"/*/README.md; do         \
+  #  date -r "$f" +"%Y-%m-%d-%H-%M-%S"; done                                   \
+  #  | sort -n                   `#once loop finished sort those timestamps`   \
+  #  | tail -n 1)"                #filter by last entry
+  ## Old Method 2: use fd
+  #local lastModReadmeDate="$(fd -t f . -x date -r {} +"%Y-%m-%d-%H-%M-%S" | sort -n | tail -n 1)"
+  ## second loop for methode1 and 2:
   ## loop again with mod timestamp and check which timestamp matches the
   ## last entry of the first loop. If found store file location
-  for f in "$zetDir"/*/README.md; do
-    modifiedReadmeDate=$(date -r "$f" +"%Y-%m-%d-%H-%M-%S")
-    [[ "$modifiedReadmeDate" == "$lastModifiedReadmeDate" ]] && local readme="$f"
-  done
+  #for f in "$zetDir"/*/README.md; do
+  #  modReadmeDate=$(date -r "$f" +"%Y-%m-%d-%H-%M-%S")
+  #  [[ "$modReadmeDate" == "$lastModReadmeDate" ]] && local readme="$f"
+  #done
+  ## TODO When it comes to performance I should do some testing what actually
+  ## works best
+  ## Current Method: Use fd and date together
+  local readme="$(fd -t f . "$zetDir" -x sh -c                                \
+    'printf "%s\n" "$(date -r {} +"%Y-%m-%d-%H-%M-%S") {}"' | sort -n |       \
+    tail -n 1 | awk '{print $2}')"
+  local dir="${readme%/*}"
   ## edit readme and if changes are made git push them
   _editReadme
-  ## Method 2: One loop that invokes subshell at every iteration
+  ## Method 3: One loop that invokes subshell at every iteration
   #local -a modifiedReadme=()
   #local -i i=0
   #local lastModifiedReadme
@@ -258,84 +293,143 @@ __editLastModifiedReadme() {
   #  i+=1
   #done
 }
-__countReadme() { fd . "$zetDir" --type d | wc -l ; }
-__version() { echo "$version"; }
+__countReadme() { fd . "$zetDir" --type d | wc -l; }
+__version() { echo "v0.0.1"; }
 
 ############################# help commands ############################
 __usage() {
   ## associative arrays are unordered for this loop to work order is
   ## required hence the second regular array 'orderCommands'
-  printf "%s\n\n" "${yellow}COMMANDS:$reset"
+  printf "%s\n\n" "${yw}COMMANDS:$rt"
   for (( i=0; i < ${#orderCommands[@]}; i+=1 )); do
     key="${orderCommands[$i]}"
-    [[ "$i" -ge 11 ]] && echo "    zet $key <pattern>" && continue
+    [[ "$i" -ge 12 ]] && echo "    zet $key <pattern>" && continue
     echo "    zet $key"
   done
 }
 __help() {
+  ##TODO for every subcommand also have help page like `zet edit help` or
+  ## `zet edit -h`
   cat <<EOF
-${yellow}NAME:$reset
-    zet - a command line tool to manage a git Zettelkasten repository.
+${yw}NAME:$rt
+    zet - a command line tool to manage a Zettelkasten (notebox) repository.
 
-${yellow}INSTALL:$reset
+${yw}INSTALL:$rt
     Installation instructions can be found on the project's website.
 
-${yellow}USAGE:$reset
+${yw}USAGE:$rt
     zet [OPTIONS] [<subcommand>] [<pattern>]...
 
-${yellow}ARGS:$reset
-    ${green}<subcommand>$reset
-          The subcommand which invokes different functionalities to manage Zettel (notes).
-    ${green}<pattern>$reset
+${yw}ARGS:$rt
+    ${gn}<subcommand>$rt
+          The subcommand which invokes different functionalities to manage \
+Zettel (notes).
+    ${gn}<pattern>$rt
           The pattern for some subcommands to search keywords, add title etc.
 
-${yellow}OPTIONS:$reset
-    ${green}-h$reset, ${green}--help$reset
+${yw}OPTIONS:$rt
+    ${gn}-h$rt, ${gn}--help$rt
           Show help information
-    ${green}-v$reset, ${green}--version$reset
+    ${gn}-v$rt, ${gn}--version$rt
           Show version information
-    ${green}-u$reset, ${green}--usage$reset
+    ${gn}-u$rt, ${gn}--usage$rt
           List all commands
 
-${yellow}ABOUT:$reset
+${yw}ABOUT:$rt
     Project: https://github.com/simonwoodtli/cmd-zet
     Author: Simon Donald Woodtli <simonwoodtli@posteo.net>
 EOF
 }
 ##################### fzfSelect dependent functions ####################
 __fzfSelect() {
-  ## filter and merge lines
-  local -a mergeTitleTag=()
-  local -i i=0
-  for f in "$zetDir"/*; do
-    filterLastLine="$(tail -n 1 "$f"/README.md 2>/dev/null)"
-    filterFirstLine="$(head -n1 "$f"/README.md 2>/dev/null)"
-    #echo "$(tail -n 1 "$f"/README.md 2>/dev/null)"
-    mergeTitleTag[$i]="$filterFirstLine"
-    if [[ "$filterLastLine" =~ ^[[:blank:]]{4}\#.*$ ]]; then
-      mergeTitleTag[$i]+="$filterLastLine"
-    fi
-    i+=1
-  done
-  ##TODO  make fzf dependent zet functions run inside vim like :Rg or the like
+  ##TODO make fzf dependent zet functions run inside vim like :Rg or the like
   ## `!!zet get` maybe won't work with !! magic wands. but something like the
-  ## commands that ship with fzf e.g. :Rg should be possible to do.
-  ##🐛TODO if fzfSelect runs and you hit Ctrl-C abort signal it prints shit or
-  ## even opens random README.md with `zet edit`
-  ## fzf select title with tags at the end of title
+  ## commands that ship with fzf e.g. :Rg should be possible to do. It
+  ## works within a tmux session but need to figure out how to make it work
+  ## without tmux session
   ##TODO make this an array so multiple files can be selected
-  ##IMPORTANT!!creating this feature with array will cost a lot of overhead many
+  ##IMPORTANT!creating this feature with array will cost a lot of overhead many
   ## loops will be needed for the other edit and delete functions that
   #want to utilize this??
-  local selectTitleLine="$(for element in "${mergeTitleTag[@]}"; do           \
-    echo "$element"; done                                                     \
-    | fzf-tmux --no-preview  -w 80% -h 70% --prompt="zet search: "`#pipe each Title and possible Tagline into fzf`  \
-    | sed -r 's|[[:blank:]]{4}#[a-z].*$||g')" #remove the tags from string
-  ## absolute path to readme file
-  local readme="$( rg --no-heading -N -l -x --type md "$selectTitleLine" "$zetDir" )"
-  ## absolute path to dir, remove README.md suffix
-  local dir="${readme%/*}"
+  ##TODO test which method has best performance
+  ## Method 1:
+  ## Use fd to find all the README.md files in the $zetDir directory
+  ## and store the list in an array
+  #
+  #local -a readmeFiles
+  #readmeFiles=($(fd --type f --follow --exclude .git --extension md .         \
+  #  "$zetDir" | grep -E '/README.md$'))
+  ## If no README.md files are found, return 1
+  #[[ ${#readmeFiles[@]} -eq 0 ]] && return 1
+  ## Extract the title and tagline from each README.md file and store them
+  ## in an array
+  #local -a titles
+  #for readme in "${readmeFiles[@]}"; do
+  #  local title="$(head -n 1 "$readme")"
+  #  local tagline="$(tail -n 1 "$readme" | rg '^[[:blank:]]{4}\#.*$')"
+  #  if [[ -n "$tagline" ]]; then
+  #    titles+=("$title $tagline")
+  #  else
+  #    titles+=("$title")
+  #  fi
+  #done
+  #############################################################################
+  ## Method 2: (my favourite)
+  ## filter and merge title and tag lines
+  #
+  local -a titles=()
+  local readmeFiles="$zetDir"/*/README.md
+  for readme in $readmeFiles; do
+    local title="$(head -n 1 "$readme")"
+    local tagline="$(tail -n 1 "$readme" | rg '^[[:blank:]]{4}\#.*$')"
+    if [[ -n "$tagline" ]]; then
+      titles+=("$title $tagline")
+    else
+      titles+=("$title")
+    fi
+  done
 
+  ## Use fzf to select a title from the list of titles (my favourite,
+  ## better than loop)
+  local title="$(printf '%s\n' "${titles[@]}" |                               \
+    FZF_DEFAULT_COMMAND='fd --type f --follow --exclude .git'                 \
+    fzf-tmux --no-preview  -w 80% -h 70% --prompt="zet search: "              \
+    --layout=reverse --info=inline | sed -r 's|[[:blank:]]{5}#[a-z].*$||g')"  \
+    &>/dev/null
+  #############################################################################
+  ## Method 3:
+  ## filter and merge title and tag lines
+  #local -a titles=()
+  #for f in "$zetDir"/*; do
+  #  tagline="$(tail -n 1 "$f"/README.md 2>/dev/null)"
+  #  title="$(head -n1 "$f"/README.md 2>/dev/null)"
+  #  if [[ "$tagline" =~ ^[[:blank:]]{4}\#.*$ ]]; then
+  #    titles+=("$title $tagline")
+  #  else
+  #    titles+=("$title")
+  #  fi
+  #done
+  ## fzf select title with tags at the end of title
+  #local title="$(for title in "${titles[@]}"; do                              \
+  #  echo "$title"; done                                                       \
+  #  | FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'      \
+  #  fzf-tmux --no-preview  -w 80% -h 70% --prompt="zet search: "              \
+  #  --layout=reverse                                                          \
+  #  --info=inline            `#pipe each Title and possible Tagline into fzf` \
+  #  | sed -r 's|[[:blank:]]{5}#[a-z].*$||g')" &>/dev/null #rm tags from string
+  #
+  #############################################################################
+
+  ## if fzfSelect runs and you abort command it echos all elements from loop
+  ## test if title is empty and exit fixes it
+  [[ -n "$title" ]] || return 1
+  ## find the absolute path to the selected README.md file using rg
+  local readme="$(rg --no-heading -Nlx -t md "$title" "$zetDir")"
+  ## if the selected title does not match a README.md file, return 1
+  [[ -n "$readme" ]] || return 1
+  ## Extract the absolute path to the directory containing the selected
+  ## README.md file, remove README.md suffix
+  local dir="${readme%/*}"
   ## case for arguments passed into it from associative array "commands" value.
   ## see title: main
   case  "$1" in
@@ -349,51 +443,58 @@ __fzfSelect() {
 }
 _printReadme() { cat "$readme" ; }
 _printBodyReadme() {
-  ## test if readme has tagline if yes remove last 3 lines and first two
-  ## lines for the title. Else just remove the first two lines
-  local bodyReadme
+  ## store the last line of the README file if it's a tagline
+  local tags="$(tail -n 1 "$readme" | rg -e "^[[:blank:]]{4}#.*$")"
   ## although shellcheck doesn't like this if else logic with A && B ||
   ## C. If B and C are var assignments this shouldn't be a problem.
   ## https://github.com/koalaman/shellcheck/wiki/SC2015
-  [[ $(tail -n 1 "$readme") =~ ^[[:blank:]]{4}\#.*$ ]]                        \
-    && bodyReadme="$( head -n -3 "$readme" | tail -n +3 )" `#rm tag and title`\
-    || bodyReadme="$( tail -n +3 "$readme")"                #rm title
-  echo "$bodyReadme"
+  ## test if readme has tags if yes remove last 4 lines and first two
+  ## lines for the title. Else just remove the first two lines
+  [[ -n "$tags" ]] && head -n -4 "$readme" | tail -n +3 || tail -n +3 "$readme"
 }
 _printDirPath() { echo "$dir" ; }
-_deleteReadme() { rm -rf "$dir" ; _deletePushGit ; }
+_deleteReadme() {
+  local errDir="${rd}Error:$rt Unable to remove directory ${bd}$dir${rt}"
+  local title="$(head -1 "$readme" | sed 's|#\+ *||')"
+  rm -rf "$dir" || { echo "$errDir"; return 1; }
+  _deletePushGit
+}
 _deletePushGit() {
   ## TODO create an array from all the selected files
   #local -a deletedZet=( "$( git ls-files --deleted )" )
+  local msgCommit="${gn}Commit:$rt Delete ${dir##*/}/README.md - $title"
+  local errCommit="${rd}Error:$rt Commit ${dir##*/}/README.md failed"
+  local errPush="${rd}Error:$rt Push ${dir##*/}/README.md failed"
   cd "$zetDir" || return 1
-  local dirIsoSec="${dir##*/}"
-  local title="Delete $dirIsoSec"
-  ## check if dirIsoSec string is empty if so exit
-  test -n "$dirIsoSec"
   git pull -q
-  echo "${green}Committing:$reset ${bold}$title${reset}"
   git add -A "$dir" &>/dev/null
-  git commit -m "$title" &>/dev/null
-  git push &>/dev/null
+  git commit -m "Delete ${dir##*/}" &>/dev/null && echo "$msgCommit" ||       \
+    { echo "$errCommit"; return 1; }
+  git push &>/dev/null || { echo "$errPush"; return 1; }
 }
 _editReadme() {
   "$editor" "$readme"
-  exit
   _editPushGit
 }
 _editPushGit() {
-  cd "$dir" || return 1
-  ## TODO check if any changes where made, if not abort git
-  #??
+  local hintChange="${be}Hint:$rt No changes were made to ${dir##*/}/README.md"
+  local msgCommit="${gn}Commit:$rt Edit ${dir##*/}/README.md - $title"
+  local errCommit="${rd}Error:$rt Commit ${dir##*/}/README.md failed"
+  local errPush="${rd}Error:$rt Push ${dir##*/}/README.md failed"
+  local errTitle="${rd}Error:$rt No title found in ${dir##*/}/README.md"
+  cd "$zetDir" || return 1
+  local gitStatusCheck="$(git status | rg "${dir##*/}")"
+  ## check if any changes where made, if not abort git
+  [[ -n "$gitStatusCheck" ]] || { echo "$hintChange"; return 1; }
   ## assign title
   local title="$(head -1 "$readme" | sed 's|#\+ *||')"
   ## check if title string is empty if so exit
-  test -n "$title"
+  [[ -n "$title" ]] || { echo "$errTitle"; return 1; }
   git pull -q
-  echo "${green}Committing:$reset ${bold}$title${reset}"
   git add -A "$dir" &>/dev/null
-  git commit -m "$title" &>/dev/null
-  git push &>/dev/null
+  git commit -m "$title" &>/dev/null && echo "$msgCommit" ||                  \
+    { echo "$errCommit"; return 1; }
+  git push &>/dev/null || { echo "$errPush"; return 1; }
 }
 ################################# main #################################
 ## create associative array with key value pairs
@@ -408,10 +509,10 @@ commands[body]="__fzfSelect body";                orderCommands+=("body")
 commands[cat]="__fzfSelect cat";                  orderCommands+=("cat")
 commands[count]="__countReadme";                  orderCommands+=("count")
 commands[help]="__help";                          orderCommands+=("help")
-commands[version]="__version";                       orderCommands+=("version")
+commands[version]="__version";                    orderCommands+=("version")
 commands[usage]="__usage";                        orderCommands+=("usage")
-commands[screenshot]="__createScreenshot";        orderCommands+=("screenshot")
 ## command with <patterns>
+commands[screenshot]="__createScreenshot";        orderCommands+=("screenshot")
 commands[use]="__configUseZet";                   orderCommands+=("use")
 commands[create]="__create";                      orderCommands+=("create")
 commands[link]="__printReferenceLinkLines";       orderCommands+=("link")
@@ -423,18 +524,23 @@ case "$1" in
   --version|-v) __version;;
 esac
 subcommand="$1"; shift
-## loop over keys and check if they match user input, if so exec
-## function call from $1 argument
+## loop over keys in the commands associative array
 for key in "${!commands[@]}"; do
+  ## if the key matches the user input subcommand
   if [[ "$key" == "$subcommand" ]]; then
+    ## execute the function call stored in the value of the key
     eval "${commands[${key}]}" "$@"
     exit 0
   fi
 done
 ######################### Tab Completion Context ########################
 ## Tab completion - add to bashrc: complete -C zet zet
+## if the script is being run in the context of tab completion
 if [ -n "$COMP_LINE" ]; then
+  ## loop over the keys in the commands array
   for cmd in "${!commands[@]}"; do
+    ## if the current key starts with the user input 
+    ## print the key as a possible completion
     [[ "${cmd:0:${#1}}" == "$1" ]] && echo $cmd
   done
   exit 0
