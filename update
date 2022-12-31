@@ -1,0 +1,20 @@
+#!/usr/bin/bash
+## if you encounter multi line substitution issues use perl, anything
+## else like sed or awk or the like just gives you headache
+__updateReadme() {
+  ## filter out the escape codes for colored text from the output of the
+  ## zet usage command and assign the resulting output to the commands variable
+  local commands="$(zet usage | sed 's|\x1B\[[0-9;]*[mGK]||g')"
+  ## Use perl to search for the string ~~~bash, followed by any number of
+  ## characters (.*), followed by the string ~~~, and replace it with the
+  ## strings ~~~bash, the value of the commands variable, and ~~~ separated
+  ## by newlines (\n). The output is written to README.md with -i flag
+  perl -i -0777pe "s/~~~bash.*~~~/~~~bash\n$commands\n~~~/s" "$PWD/README.md"
+}
+__updateTag() {
+  ## store the latest git tag version                                                   
+  local latestTag="$(git tag | sort -V | tail -n 1)"                            
+  ## replace old version with new
+  sed -i "s|local version=.*|local version=\""$latestTag"\"|" "$PWD/zet"
+}
+__updateReadme && __updateTag
