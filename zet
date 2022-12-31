@@ -293,7 +293,10 @@ __editLastModifiedReadme() {
   #done
 }
 __countReadme() { fd . "$zetDir" --type d | wc -l; }
-__version() { echo "v0.0.1"; }
+__version() { 
+  local version=""
+  echo "$version"
+}
 ############################# help commands ############################
 __usage() {
   ## associative arrays are unordered for this loop to work order is
