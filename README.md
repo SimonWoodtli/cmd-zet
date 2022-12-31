@@ -31,8 +31,8 @@ Quick links:
 
 ## How to use
 
-```bash
-Commands:
+~~~bash
+COMMANDS:
 
     zet init
     zet current
@@ -45,13 +45,13 @@ Commands:
     zet count
     zet help
     zet version
-    zet usage <pattern>
+    zet usage
     zet screenshot <pattern>
     zet use <pattern>
     zet create <pattern>
     zet link <pattern>
     zet query <pattern>
-```
+~~~
 
 ## Installation
 
