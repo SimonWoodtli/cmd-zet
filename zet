@@ -3,14 +3,11 @@
 ## Project: https://github.com/SimonWoodtli/cmd-zet
 ## License:  Apache-2.0
 #
-## TODO anything that returns one line like `zet get` should also be xcliped
 ## __functionName() = main function called from user input
 ## _functionName()  = sub function only called from within a main function
 ## enable extended globbing:
 shopt -s extglob
 ########################### global variables ###########################
-#
-## TODO change color variables in whole script to short version
 declare rd=$'\033[31m'      #red
 declare gn=$'\033[32m'      #green
 declare yw=$'\033[33m'      #yellow
@@ -309,8 +306,6 @@ __usage() {
   done
 }
 __help() {
-  ##TODO for every subcommand also have help page like `zet edit help` or
-  ## `zet edit -h`
   cat <<EOF
 ${yw}NAME:$rt
     zet - a command line tool to manage a Zettelkasten (notebox) repository.
@@ -461,8 +456,6 @@ _deleteReadme() {
   _deletePushGit
 }
 _deletePushGit() {
-  ## TODO create an array from all the selected files
-  #local -a deletedZet=( "$( git ls-files --deleted )" )
   local msgCommit="${gn}Commit:$rt Delete ${dir##*/}/README.md - $title"
   local errCommit="${rd}Error:$rt Commit ${dir##*/}/README.md failed"
   local errPush="${rd}Error:$rt Push ${dir##*/}/README.md failed"
