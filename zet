@@ -271,8 +271,6 @@ __editLastModifiedReadme() {
   #  modReadmeDate=$(date -r "$f" +"%Y-%m-%d-%H-%M-%S")
   #  [[ "$modReadmeDate" == "$lastModReadmeDate" ]] && local readme="$f"
   #done
-  ## TODO When it comes to performance I should do some testing what actually
-  ## works best
   ## Current Method: Use fd and date together
   local readme="$(fd -t f . "$zetDir" -x sh -c                                \
     'printf "%s\n" "$(date -r {} +"%Y-%m-%d-%H-%M-%S") {}"' | sort -n |       \
@@ -341,16 +339,6 @@ EOF
 }
 ##################### fzfSelect dependent functions ####################
 __fzfSelect() {
-  ##TODO make fzf dependent zet functions run inside vim like :Rg or the like
-  ## `!!zet get` maybe won't work with !! magic wands. but something like the
-  ## commands that ship with fzf e.g. :Rg should be possible to do. It
-  ## works within a tmux session but need to figure out how to make it work
-  ## without tmux session
-  ##TODO make this an array so multiple files can be selected
-  ##IMPORTANT!creating this feature with array will cost a lot of overhead many
-  ## loops will be needed for the other edit and delete functions that
-  #want to utilize this??
-  ##TODO test which method has best performance
   ## Method 1:
   ## Use fd to find all the README.md files in the $zetDir directory
   ## and store the list in an array
