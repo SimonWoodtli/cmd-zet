@@ -3,14 +3,11 @@
 ## Project: https://github.com/SimonWoodtli/cmd-zet
 ## License:  Apache-2.0
 #
-## TODO anything that returns one line like `zet get` should also be xcliped
 ## __functionName() = main function called from user input
 ## _functionName()  = sub function only called from within a main function
 ## enable extended globbing:
 shopt -s extglob
 ########################### global variables ###########################
-#
-## TODO change color variables in whole script to short version
 declare rd=$'\033[31m'      #red
 declare gn=$'\033[32m'      #green
 declare yw=$'\033[33m'      #yellow
@@ -69,8 +66,8 @@ _checkDependencies() {
   for program in "${programs[@]}"; do
     command -v "$program" >/dev/null 2>&1 || missPrograms+=( "$program" )
   done
-  local errMiss="${rd}Error:$rt Missing dependency(ies): \
-${bd}${missPrograms[*]}$rt"
+  local errMiss="${rd}Error:$rt Missing dependency(ies): "
+  errMiss+="${bd}${missPrograms[*]}$rt"
   if [[ -n "${missPrograms[*]}" ]]; then
     echo "$errMiss"
     return 1
@@ -146,6 +143,9 @@ __create() {
 }
 _createEditFile() { "$editor" "$readme" ; }
 _createPushGit() {
+  ## check if title has changed after editing if so reassign it
+  local newTitle="$(head -1 "$readme" | sed 's|#\+ *||')"
+  [[ "$title" == "$newTitle" ]] || title="$newTitle"
   local errTitle="${rd}Error:$rt Missing title."
   local msgCommit="${gn}Commit:$rt Create ${dir##*/}/README.md - $title"
   local errCommit="${rd}Error:$rt Commit ${dir##*/}/README.md failed"
@@ -153,9 +153,6 @@ _createPushGit() {
   ## check if readme.md is empty, if so abort git commands
   [[ -s "$readme" ]] || return 1
   cd "$dir" || return 1
-  ## check if title has changed after editing if so reassign it
-  local newTitle="$(head -1 "$readme" | sed 's|#\+ *||')"
-  [[ "$title" == "$newTitle" ]] || title="$newTitle"
   ## check if title string is not empty or exit
   [[ -n "$title" ]] || { echo "$errTitle"; return 1; }
   git pull -q
@@ -170,8 +167,8 @@ __createScreenshot() {
   local errScreenshot="${rd}Error:$rt Unable to create screenshot."
   local errIdentify="${rd}Error:$rt Screenshot width/height could not be set."
   local errMove="${rd}Error:$rt Unable to move screenshot."
-  local errSize="${rd}Error:$rt Screenshot size is limited to 1MB. \
-Zettel: ${bd}${dir##*/}${rt}"
+  local errSize="${rd}Error:$rt Screenshot size is limited to 1MB. "
+  errSize+="Zettel: ${bd}${dir##*/}${rt}"
   local isoSec="$(_isoSec)"
   local dir="$zetDir/$isoSec" #absolute path
   local readme="$dir/README.md" #absolute path
@@ -204,52 +201,54 @@ Zettel: ${bd}${dir##*/}${rt}"
 }
 ############################ search commands ###########################
 __printReferenceLinkLines() {
-  local keywords="$*"
-  local hintKeywords="${be}Hint:$rt Missing search query. \
-Use ${bd}\`zet link <searchterm>\`$rt"
+  local hintKeywords="${be}Hint:$rt Missing search query. "
+  hintKeywords+="Use ${bd}\`zet link <searchterm>\`$rt"
+  local hintNoMatch="${be}Hint:$rt No keyword matches found in title or "
+  hintNoMatch+="tagline. Try another query with different keywords."
+  local -a keywords=("$@")
+  local -a referenceLinks
+  local -a readmeFiles=("$zetDir"/*/README.md)
+  local rgCmd
   [[ -n "$keywords" ]] || { echo "$hintKeywords"; return 1; }
-  local -a addLinkLine=()
-  local -i i=0
   ## create ripgrep keyword string with pipes. The idea is that if multiple
   ## keywords are being used they are filtered with an AND logic.
-  local keywordRgLine
-  for keyword in $keywords; do
-    keywordRgLine+="rg -i --no-heading $keyword|"
+  for keyword in "${keywords[@]}"; do
+    ## check if last keyword if yes stop assigning a pipe at the end
+    if [[ "${keywords[-1]}" == "$keyword" ]]; then
+      rgCmd+="rg -i --no-heading $keyword"
+      continue #skip rest of loop
+    fi
+    rgCmd+="rg -i --no-heading $keyword | "
   done
-  ## remove the last pipe from string
-  keywordRgLine="${keywordRgLine%|}"
-  ## loop over all dir in zetDir
-  for dir in "$zetDir"/*; do
-    ## grab title of current zetdir empty variable if keyword not found.
-    title="$(head -n1 "$dir/README.md" 2>/dev/null |                          \
-      eval "$keywordRgLine" | sed 's|#[[:blank:]]||')"
+  ## loop over all readme files in zetDir
+  for readme in "${readmeFiles[@]}"; do
+    dir="${readme%/*}"
+    ## grab title of current zetDir, empty variable if keyword not found
+    title="$(head -n1 "$readme" | eval "$rgCmd" | sed 's|#[[:blank:]]||')"
     ## if it already finds keyword in title skip checking the tagline. To
     ## avoid double entries
     if [[ -n "$title" ]]; then
       ## add title to array
-      addLinkLine[$i]="* [${dir##*/}](/${dir##*/}/) $title"
-      i+=1
-      ## skip rest of loop. loop over next zetdir
-      continue
+      referenceLinks+=("* [${dir##*/}](/${dir##*/}/) $title")
+      continue #skip rest of loop. loop over next zetdir
     fi
-    ## store last line
-    tagline="$(tail -n 1 "$dir/README.md" 2>/dev/null |                       \
-      eval "$keywordRgLine" )"
-    ## check if last line has same structure to tagline
-    if [[ "$tagline" =~ ^[[:blank:]]{4}\#.*$ ]]; then
+    ## check readme for keyword matches and if it j structure of tagline 
+    tagline="$(tail -n 1 "$readme" | eval "$rgCmd" | rg '^[[:blank:]]{4}\#.*$')"
+    ## check if tagline is not empty, if so add title to referenceLinks array
+    if [[ -n "$tagline" ]]; then
+      title="$(head -n1 "$readme" 2>/dev/null | sed 's|#[[:blank:]]||')"
       ## add the tagline title to array
-      local truncateFirstLine="$(head -n1 "$dir/README.md" 2>/dev/null |      \
-        sed 's|#[[:blank:]]||')"
-      addLinkLine[$i]+="* [${dir##*/}](/${dir##*/}/) $truncateFirstLine"
-      i+=1
+      referenceLinks+=("* [${dir##*/}](/${dir##*/}/) $title")
     fi
   done
-  printf '%s\n' "${addLinkLine[@]}"
+  ## check if any keywords matched or send msg
+  [[ -n "${referenceLinks[@]}" ]] || { echo "$hintNoMatch"; return 1; }
+  printf '%s\n' "${referenceLinks[@]}"
 }
 __printGithubQueryLine() {
   local keywords="$*"
-  local hintKeywords="${be}Hint:$rt Missing search query. \
-Use ${bd}\`zet query <searchterm>\`$rt"
+  local hintKeywords="${be}Hint:$rt Missing search query. "
+  hintKeywords+="Use ${bd}\`zet query <searchterm>\`$rt"
   [[ -n "$keywords" ]] || { echo "$hintKeywords"; return 1; }
   local encodeKeywords="$(_urlencode "$keywords")"
   local link="https://github.com/$gitUser/$scriptName/search?q=$encodeKeywords"
@@ -272,8 +271,6 @@ __editLastModifiedReadme() {
   #  modReadmeDate=$(date -r "$f" +"%Y-%m-%d-%H-%M-%S")
   #  [[ "$modReadmeDate" == "$lastModReadmeDate" ]] && local readme="$f"
   #done
-  ## TODO When it comes to performance I should do some testing what actually
-  ## works best
   ## Current Method: Use fd and date together
   local readme="$(fd -t f . "$zetDir" -x sh -c                                \
     'printf "%s\n" "$(date -r {} +"%Y-%m-%d-%H-%M-%S") {}"' | sort -n |       \
@@ -294,8 +291,10 @@ __editLastModifiedReadme() {
   #done
 }
 __countReadme() { fd . "$zetDir" --type d | wc -l; }
-__version() { echo "v0.0.1"; }
-
+__version() { 
+  local version=""
+  echo "$version"
+}
 ############################# help commands ############################
 __usage() {
   ## associative arrays are unordered for this loop to work order is
@@ -308,8 +307,6 @@ __usage() {
   done
 }
 __help() {
-  ##TODO for every subcommand also have help page like `zet edit help` or
-  ## `zet edit -h`
   cat <<EOF
 ${yw}NAME:$rt
     zet - a command line tool to manage a Zettelkasten (notebox) repository.
@@ -342,16 +339,6 @@ EOF
 }
 ##################### fzfSelect dependent functions ####################
 __fzfSelect() {
-  ##TODO make fzf dependent zet functions run inside vim like :Rg or the like
-  ## `!!zet get` maybe won't work with !! magic wands. but something like the
-  ## commands that ship with fzf e.g. :Rg should be possible to do. It
-  ## works within a tmux session but need to figure out how to make it work
-  ## without tmux session
-  ##TODO make this an array so multiple files can be selected
-  ##IMPORTANT!creating this feature with array will cost a lot of overhead many
-  ## loops will be needed for the other edit and delete functions that
-  #want to utilize this??
-  ##TODO test which method has best performance
   ## Method 1:
   ## Use fd to find all the README.md files in the $zetDir directory
   ## and store the list in an array
@@ -380,8 +367,8 @@ __fzfSelect() {
   local -a titles=()
   local readmeFiles="$zetDir"/*/README.md
   for readme in $readmeFiles; do
-    local title="$(head -n 1 "$readme")"
-    local tagline="$(tail -n 1 "$readme" | rg '^[[:blank:]]{4}\#.*$')"
+    title="$(head -n 1 "$readme")"
+    tagline="$(tail -n 1 "$readme" | rg '^[[:blank:]]{4}\#.*$')"
     if [[ -n "$tagline" ]]; then
       titles+=("$title $tagline")
     else
@@ -460,8 +447,6 @@ _deleteReadme() {
   _deletePushGit
 }
 _deletePushGit() {
-  ## TODO create an array from all the selected files
-  #local -a deletedZet=( "$( git ls-files --deleted )" )
   local msgCommit="${gn}Commit:$rt Delete ${dir##*/}/README.md - $title"
   local errCommit="${rd}Error:$rt Commit ${dir##*/}/README.md failed"
   local errPush="${rd}Error:$rt Push ${dir##*/}/README.md failed"
