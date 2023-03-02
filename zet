@@ -159,7 +159,11 @@ _createPushGit() {
   git add -A "$dir" &>/dev/null
   git commit -m "$title" &>/dev/null && echo "$msgCommit" ||                  \
     { echo "$errCommit"; return 1; }
-  git push &>/dev/null || { echo "$errPush"; return 1; }
+  #git tag -s -m "new zet" "${dir##*/}"
+  git tag "${dir##*/}"
+  #git push --follow-tags &>/dev/null || { echo "$errPush"; return 1; }
+  git push --tags &>/dev/null || { echo "$errPush"; return 1; }
+  #git push --tags
 }
 __createScreenshot() {
   local hintTitle="${be}Hint:$rt Use ${bd}\`zet screenshot <title>\`$rt"
@@ -360,6 +364,7 @@ __fzfSelect() {
   #    titles+=("$title")
   #  fi
   #done
+  ##TODO test if `git grep -i` is an alternative to rg performancewise
   #############################################################################
   ## Method 2: (my favourite)
   ## filter and merge title and tag lines
@@ -452,10 +457,14 @@ _deletePushGit() {
   local errPush="${rd}Error:$rt Push ${dir##*/}/README.md failed"
   cd "$zetDir" || return 1
   git pull -q
+  ##rm tag
+  git tag -d "${dir##*/}"
   git add -A "$dir" &>/dev/null
   git commit -m "Delete ${dir##*/}" &>/dev/null && echo "$msgCommit" ||       \
     { echo "$errCommit"; return 1; }
-  git push &>/dev/null || { echo "$errPush"; return 1; }
+  ## push commit and remove tag from remote
+  git push origin --delete "${dir##*/}" &>/dev/null || { echo "$errPush"; return 1; }
+  #git push origin :ISOSEC
 }
 _editReadme() {
   "$editor" "$readme"
