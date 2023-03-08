@@ -157,13 +157,10 @@ _createPushGit() {
   [[ -n "$title" ]] || { echo "$errTitle"; return 1; }
   git pull -q
   git add -A "$dir" &>/dev/null
-  git commit -m "$title" &>/dev/null && echo "$msgCommit" ||                  \
+  git commit -m "$title" && echo "$msgCommit" ||                              \
     { echo "$errCommit"; return 1; }
-  #git tag -s -m "new zet" "${dir##*/}"
   git tag "${dir##*/}"
-  #git push --follow-tags &>/dev/null || { echo "$errPush"; return 1; }
   git push --tags &>/dev/null || { echo "$errPush"; return 1; }
-  #git push --tags
 }
 __createScreenshot() {
   local hintTitle="${be}Hint:$rt Use ${bd}\`zet screenshot <title>\`$rt"
@@ -458,13 +455,12 @@ _deletePushGit() {
   cd "$zetDir" || return 1
   git pull -q
   ##rm tag
-  git tag -d "${dir##*/}"
+  git tag -d "${dir##*/}" &>/dev/null
   git add -A "$dir" &>/dev/null
-  git commit -m "Delete ${dir##*/}" &>/dev/null && echo "$msgCommit" ||       \
+  git commit -m "Delete ${dir##*/}" && echo "$msgCommit" ||                   \
     { echo "$errCommit"; return 1; }
   ## push commit and remove tag from remote
   git push origin --delete "${dir##*/}" &>/dev/null || { echo "$errPush"; return 1; }
-  #git push origin :ISOSEC
 }
 _editReadme() {
   "$editor" "$readme"
@@ -475,20 +471,36 @@ _editPushGit() {
   local msgCommit="${gn}Commit:$rt Edit ${dir##*/}/README.md - $title"
   local errCommit="${rd}Error:$rt Commit ${dir##*/}/README.md failed"
   local errPush="${rd}Error:$rt Push ${dir##*/}/README.md failed"
+  local errPushTag="${rd}Error:$rt Push Tag for ${dir##*/}/README.md failed"
   local errTitle="${rd}Error:$rt No title found in ${dir##*/}/README.md"
+  ## rm # from originally selected title
+  local originalTitle="$(sed 's|#\+ *||' <<< "$title")"
   cd "$zetDir" || return 1
   local gitStatusCheck="$(git status | rg "${dir##*/}")"
   ## check if any changes where made, if not abort git
   [[ -n "$gitStatusCheck" ]] || { echo "$hintChange"; return 1; }
-  ## assign title
+  ## assign title (cause you might have changed it)
   local title="$(head -1 "$readme" | sed 's|#\+ *||')"
   ## check if title string is empty if so exit
   [[ -n "$title" ]] || { echo "$errTitle"; return 1; }
   git pull -q
   git add -A "$dir" &>/dev/null
-  git commit -m "$title" &>/dev/null && echo "$msgCommit" ||                  \
+  git commit -m "$title" && echo "$msgCommit" ||                              \
     { echo "$errCommit"; return 1; }
-  git push &>/dev/null || { echo "$errPush"; return 1; }
+  ## check if title has changed, if so create new tag
+  if [[ "$originalTitle" != "$title" ]]; then
+    ## FIXME find a way to use annotaded tags but with a custom
+    #taggertimestamp, which should be the old time from when the zet was
+    #first created. (solves issue of readme-writer showing notes that
+    #aren't new but just have an updated title.)
+    ## remove tag (to update tag message: when title changed)
+    git tag -d "${dir##*/}"  &>/dev/null
+    #git tag -s "${dir##*/}" -m "$title"
+    git tag "${dir##*/}"
+    git push --tags --force &>/dev/null || { echo "$errPush"; return 1; }
+  else
+    git push &>/dev/null || { echo "$errPush"; return 1; }
+  fi
 }
 ################################# main #################################
 ## create associative array with key value pairs
