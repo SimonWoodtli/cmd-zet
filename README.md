@@ -178,6 +178,10 @@ quite a bit to make them work in my command.
 Copyright 2022 Simon D. Woodtli <simonwoodtli@posteo.net>  
 Released under Apache-2.0 License  
 
+## Stats
+
+![Alt](https://repobeats.axiom.co/api/embed/87f4865318b3d00fa3ff94a8bc9dce89fffbbc96.svg "Repobeats analytics image")
+
 [rwxrob]: <https://github.com/rwxrob/>
 [Install]: <#installation>
 [How to use]: <#how-to-use>
