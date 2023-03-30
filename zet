@@ -64,7 +64,14 @@ _checkDependencies() {
   local -a programs=( fzf fd rg sed awk identify xclip git gnome-screenshot )
   local -a missPrograms
   for program in "${programs[@]}"; do
-    command -v "$program" >/dev/null 2>&1 || missPrograms+=( "$program" )
+    if [[ $(command -v "$program") == "" ]]; then
+      if [[ "$program" == rg ]]; then
+        program="ripgrep"
+      elif [[ "$program" == identify ]]; then
+        program="imagemagick"
+      fi
+      missPrograms+=( "$program" )
+    fi
   done
   local errMiss="${rd}Error:$rt Missing dependency(ies): "
   errMiss+="${bd}${missPrograms[*]}$rt"
