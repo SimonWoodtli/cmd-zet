@@ -1,5 +1,8 @@
 # zet
 
+[![License](https://img.shields.io/badge/license-Apache2-brightgreen.svg)](LICENSE)
+[![wakatime](https://wakatime.com/badge/user/173067c8-7ded-4cfb-8605-b3032659c00c/project/1968a212-8748-4e2c-81b0-71add7e07ccb.svg)](https://wakatime.com/badge/user/173067c8-7ded-4cfb-8605-b3032659c00c/project/1968a212-8748-4e2c-81b0-71add7e07ccb)
+
 This is `zet`, a command line tool for managing your digital Zettelkasten
 (notebox). Many commands use fzf for easier management of a Zettelkasten
 repository. `zet` is a bash script that also uses `rg` for faster grep searches
